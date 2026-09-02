@@ -103,6 +103,13 @@
     <string name="recordings_empty">暂无录音，录完一条会显示在这里</string>
     <string name="stop_playback">停止</string>
 
+    <!-- 主窗口 Tabs -->
+    <string name="tab_realtime">实时转写</string>
+    <string name="tab_non_realtime">非实时转写</string>
+    <string name="transcript_label">转写内容</string>
+    <string name="copied">已复制</string>
+    <string name="nothing_to_copy">没有可复制的内容</string>
+
     <!-- 设置界面 -->
     <string name="settings_title">设置</string>
     <string name="settings_storage_category">存储管理</string>
