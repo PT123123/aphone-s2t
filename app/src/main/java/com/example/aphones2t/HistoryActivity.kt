@@ -33,6 +33,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -42,6 +43,18 @@ class HistoryActivity : AppCompatActivity() {
     private lateinit var binding: ActivityHistoryBinding
     private val repo by lazy { TranscriptRepository(AppDatabase.get(this).transcriptDao()) }
     private val adapter = HistoryAdapter { showDetails(it) }
+
+    /** Id of the item currently being (re-)transcribed; -1 when idle. Guards against double runs. */
+    private var transcribingId = -1L
+
+    /**
+     * 尚未执行过转写的记录：文本为空、有音频文件、且模型名仍为待转写标记。
+     * 转写完成（即使结果为空）后模型名会变成实际模型名，不再视为 pending，
+     * 避免"待转写"无限循环。
+     */
+    private fun isPending(item: TranscriptEntity): Boolean =
+        item.text.isBlank() && !item.wavPath.isNullOrBlank() &&
+            (item.modelName.isBlank() || item.modelName == getString(R.string.pending_transcribe))
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,7 +66,7 @@ class HistoryActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                repo.all.collectLatest { list ->
+                repo.history.collectLatest { list ->
                     adapter.submitList(list)
                     binding.empty.visibility = if (list.isEmpty()) View.VISIBLE else View.GONE
                 }
@@ -64,20 +77,26 @@ class HistoryActivity : AppCompatActivity() {
     private fun showDetails(item: TranscriptEntity) {
         val time = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(item.createdAt))
         val dur = DateUtils.formatElapsedTime(item.durationMs / 1000)
-        val canTranscribe = item.text.isBlank() &&
-            !item.wavPath.isNullOrBlank() &&
-            ModelManager.getActiveModelDirectory(this) != null
+        val modelDir = ModelManager.getActiveModelDirectory(this)
+        val modelReady = modelDir != null
+        val pending = isPending(item)
+        // 模型就绪时，点击"待转写"记录即自动开始转写；详情弹窗同时保留，便于播放/删除等。
+        val willAutoTranscribe = pending && modelReady && transcribingId != item.id
+        val isTranscribing = transcribingId == item.id
         val actions = buildList {
             add(getString(R.string.copy))
-            if (canTranscribe) add(getString(R.string.action_transcribe))
+            if (pending && modelReady) add(getString(R.string.action_transcribe))
             add(getString(R.string.share))
             add(getString(R.string.play))
             add(getString(R.string.delete))
         }
         val message = when {
             item.text.isNotBlank() -> item.text
-            !item.wavPath.isNullOrBlank() -> getString(R.string.history_pending)
-            else -> "[空]"
+            pending && !modelReady -> getString(R.string.history_pending_no_model)
+            pending && (isTranscribing || willAutoTranscribe) -> getString(R.string.history_pending_transcribing)
+            pending -> getString(R.string.history_pending_ready)
+            item.wavPath.isNullOrBlank() -> "[空]"
+            else -> getString(R.string.history_pending_empty)
         }
         AlertDialog.Builder(this)
             .setTitle("$time · $dur")
@@ -89,7 +108,7 @@ class HistoryActivity : AppCompatActivity() {
                             ?.setPrimaryClip(ClipData.newPlainText("transcript", item.text))
                         Toast.makeText(this, "已复制", Toast.LENGTH_SHORT).show()
                     }
-                    getString(R.string.action_transcribe) -> transcribe(item)
+                    getString(R.string.action_transcribe) -> modelDir?.let { transcribe(item, it) }
                     getString(R.string.share) -> startActivity(Intent.createChooser(
                         Intent(Intent.ACTION_SEND).apply {
                             type = "text/plain"; putExtra(Intent.EXTRA_TEXT, item.text)
@@ -100,21 +119,23 @@ class HistoryActivity : AppCompatActivity() {
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
+        // 模型就绪时点击待转写记录：直接开始转写，完成后列表自动更新
+        if (willAutoTranscribe) modelDir?.let { transcribe(item, it) }
     }
 
     /** Re-transcribes a pending recording/import once a model is available. */
-    private fun transcribe(item: TranscriptEntity) {
+    private fun transcribe(item: TranscriptEntity, modelDir: File) {
+        if (transcribingId == item.id) return // 已在转写中，避免重复
         val path = item.wavPath ?: run {
             Toast.makeText(this, "无音频文件", Toast.LENGTH_SHORT).show(); return
         }
-        val modelDir = ModelManager.getActiveModelDirectory(this) ?: run {
-            Toast.makeText(this, getString(R.string.transcribe_no_model), Toast.LENGTH_SHORT).show(); return
-        }
+        transcribingId = item.id
         Toast.makeText(this, getString(R.string.transcribing_status), Toast.LENGTH_SHORT).show()
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
                 FileTranscriber.transcribe(this@HistoryActivity, modelDir, path)
             }
+            transcribingId = -1L
             if (result == null) {
                 Toast.makeText(this@HistoryActivity, getString(R.string.transcribe_failed), Toast.LENGTH_SHORT).show()
                 return@launch
@@ -163,7 +184,11 @@ class HistoryActivity : AppCompatActivity() {
                 b.tvTitle.text = "$time · $dur · ${item.modelName}"
                 b.tvSnippet.text = when {
                     item.text.isNotBlank() -> item.text
-                    !item.wavPath.isNullOrBlank() -> b.root.context.getString(R.string.pending_transcribe)
+                    !item.wavPath.isNullOrBlank() &&
+                        (item.modelName.isBlank() ||
+                            item.modelName == b.root.context.getString(R.string.pending_transcribe)) ->
+                        b.root.context.getString(R.string.pending_transcribe)
+                    !item.wavPath.isNullOrBlank() -> b.root.context.getString(R.string.transcribe_empty)
                     else -> "[空]"
                 }
             }
