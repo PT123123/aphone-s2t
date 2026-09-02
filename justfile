@@ -1,21 +1,51 @@
 # Android语音转写应用 - Just命令文件
 # 使用方法: just [command]
+# 说明: 命令全部内联执行，不依赖 .bat / .sh 脚本
 
-# 构建项目
+# 构建项目 (debug|release)
+[script]
 build type="debug":
-    @bash build.sh {{type}}
+    if [ "{{type}}" = "release" ]; then
+        task="assembleRelease"
+        apk="app/build/outputs/apk/release/app-release.apk"
+    else
+        task="assembleDebug"
+        apk="app/build/outputs/apk/debug/app-debug.apk"
+    fi
+    ./gradlew "$task"
+    echo "✅ 构建完成: $apk"
 
-# 安装APK到设备
+# 安装APK到设备 (debug|release)，APK缺失时自动构建
+[script]
 install type="debug":
-    @bash install.sh {{type}}
+    if [ "{{type}}" = "release" ]; then
+        task="assembleRelease"
+        apk="app/build/outputs/apk/release/app-release.apk"
+    else
+        task="assembleDebug"
+        apk="app/build/outputs/apk/debug/app-debug.apk"
+    fi
+    if ! command -v adb >/dev/null 2>&1; then echo "❌ 未找到 adb 命令，请将 platform-tools 加入 PATH"; exit 1; fi
+    if ! adb devices | grep -q "device$"; then echo "❌ 未找到已连接的 Android 设备"; adb devices; exit 1; fi
+    if [ ! -f "$apk" ]; then echo "⚠️  APK 不存在，先自动构建"; ./gradlew "$task"; fi
+    adb install -r "$apk"
 
 # 构建 + 安装
+[script]
 bi type="debug":
-    @bash build.sh {{type}} && bash install.sh {{type}}
+    if [ "{{type}}" = "release" ]; then
+        task="assembleRelease"
+        apk="app/build/outputs/apk/release/app-release.apk"
+    else
+        task="assembleDebug"
+        apk="app/build/outputs/apk/debug/app-debug.apk"
+    fi
+    ./gradlew "$task"
+    adb install -r "$apk"
 
 # 清理构建
 clean:
-    @bash clean.sh
+    @./gradlew clean
 
 # 查看设备
 devices:

@@ -26,3 +26,13 @@ _refs/
 
 # Windows redirect artifact accidentally created by `2> nul`
 /nul
+
+# Tooling / session state
+.kotlin/
+.test_just/
+.workbuddy/
+
+# Debug / verification artifacts (screenshots, db dumps)
+build_shot*
+dbcheck/
+dbcheck2/

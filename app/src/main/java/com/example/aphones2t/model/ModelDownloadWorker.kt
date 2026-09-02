@@ -3,8 +3,8 @@ package com.example.aphones2t.model
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
-import android.app.ServiceInfo
 import android.content.Context
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.StatFs
 import androidx.core.app.NotificationCompat
@@ -26,6 +26,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.security.MessageDigest
 
 /**
@@ -39,7 +40,7 @@ class ModelDownloadWorker(
 ) : CoroutineWorker(appContext, params) {
 
     private val client = OkHttpClient()
-    private val extractor = ArchiveExtractor()
+    private val extractor = ArchiveExtractor
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val modelId = inputData.getString(KEY_MODEL_ID)

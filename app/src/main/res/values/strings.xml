@@ -9,10 +9,25 @@
     <string name="idle_status">待机</string>
     <string name="recording_status">录音中…</string>
     <string name="paused_status">已暂停</string>
-    <string name="hint_wait_model">请先在「模型管理」中下载识别模型</string>
+    <string name="hint_no_model">未下载模型：录音 / 导入音频仍可用，下载模型后即可转写</string>
     <string name="hint_ready">点击「开始录音」即可实时转写</string>
     <string name="menu_models">模型管理</string>
     <string name="menu_history">历史记录</string>
+    <string name="menu_import">导入音频</string>
+
+    <!-- 无模型录音 / 导入 -->
+    <string name="notification_no_model">仅录音（未加载识别模型）</string>
+    <string name="pending_transcribe">待转写</string>
+    <string name="history_pending">[待转写] 下载模型后可在详情中点击「转写」</string>
+    <string name="importing_status">正在导入 / 转写…</string>
+    <string name="transcribing_status">正在转写…</string>
+    <string name="import_pending">音频已导入，下载模型后可在历史记录中转写</string>
+    <string name="import_success">导入并转写完成</string>
+    <string name="import_failed">导入失败：%1$s</string>
+    <string name="action_transcribe">转写</string>
+    <string name="transcribe_no_model">请先下载识别模型</string>
+    <string name="transcribe_failed">转写失败</string>
+    <string name="transcribe_success">转写完成</string>
 
     <!-- Foreground service / notification -->
     <string name="channel_name">语音转写</string>
@@ -48,6 +63,9 @@
     <string name="no_network">无网络，无法下载</string>
     <string name="free_space_error">存储空间不足</string>
     <string name="custom_required_fields">请填写模型地址</string>
+    <string name="model_download_link">下载链接</string>
+    <string name="action_copy_link">复制链接</string>
+    <string name="link_copied">下载链接已复制</string>
 
     <!-- Custom Model Dialog -->
     <string name="custom_model_dialog_title">添加自定义模型</string>
@@ -82,8 +100,20 @@
     <string name="settings_storage_info">存储信息</string>
     <string name="settings_clear_cache">清理缓存</string>
     <string name="settings_clear_cache_summary">删除临时文件释放存储空间</string>
-    <string name="settings_manage_models">管理模型</string>
+        <string name="filter_language">语言</string>
+    <string name="sort_by">排序</string>
+<string name="settings_manage_models">管理模型</string>
     <string name="settings_manage_recordings">管理录音</string>
+    <string name="settings_paste_custom_models">批量粘贴模型</string>
+    <string name="settings_paste_custom_models_summary">粘贴多行「名称|URL」即可添加，无需重新编译</string>
+    <string name="paste_format_hint">格式：每行一个模型（# 开头为注释行），支持两种写法：\n1) 名称|下载URL\n2) 仅下载URL（名称自动取文件名）</string>
+    <string name="paste_input_hint">在此粘贴模型列表</string>
+    <string name="paste_save_add">保存并添加</string>
+    <string name="paste_custom_list_title">已添加的自定义模型</string>
+    <string name="paste_custom_empty">暂无自定义模型，粘贴上面格式的内容即可添加</string>
+    <string name="paste_empty_error">没有可添加的内容，请先粘贴模型地址</string>
+    <string name="paste_success">已添加 %1$d 个模型</string>
+    <string name="paste_partial_error">已添加 %1$d 个，%2$d 个无效链接被跳过</string>
     <string name="settings_about_category">关于</string>
     <string name="settings_version">版本</string>
     <string name="settings_about">关于应用</string>

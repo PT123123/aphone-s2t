@@ -55,6 +55,13 @@ class SettingsActivity : AppCompatActivity() {
                 true
             }
 
+            // 批量粘贴自定义模型（运行时添加，无需重新编译）
+            val pasteCustomPref = findPreference<Preference>("paste_custom_models")
+            pasteCustomPref?.setOnPreferenceClickListener {
+                startActivity(Intent(requireContext(), CustomModelActivity::class.java))
+                true
+            }
+
             // 管理录音
             val manageRecordingsPref = findPreference<Preference>("manage_recordings")
             manageRecordingsPref?.setOnPreferenceClickListener {
