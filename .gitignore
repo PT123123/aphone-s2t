@@ -1,0 +1,28 @@
+# Gradle / Android build output
+.gradle/
+build/
+app/build/
+.cxx/
+.cxx/
+local.properties
+*.apk
+*.aab
+*.ap_
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# OS / misc
+.DS_Store
+Thumbs.db
+
+# Vendored reference sources (have their own .git, not needed to build)
+sherpa-onnx/
+_refs/
+
+# Windows redirect artifact accidentally created by `2> nul`
+/nul
