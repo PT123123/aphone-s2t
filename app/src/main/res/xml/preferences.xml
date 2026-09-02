@@ -30,6 +30,14 @@
             app:iconSpaceReserved="false" />
 
         <Preference
+            android:id="@+id/pref_paste_custom_models"
+            android:key="paste_custom_models"
+            android:title="@string/settings_paste_custom_models"
+            app:icon="@android:drawable/ic_menu_edit"
+            app:iconSpaceReserved="false"
+            app:summary="@string/settings_paste_custom_models_summary" />
+
+        <Preference
             android:id="@+id/pref_manage_recordings"
             android:key="manage_recordings"
             android:title="@string/settings_manage_recordings"

@@ -21,5 +21,6 @@ class TranscriptRepository(private val dao: TranscriptDao) {
 
     suspend fun delete(t: TranscriptEntity) = dao.delete(t)
     suspend fun deleteById(id: Long) = dao.deleteById(id)
+    suspend fun update(t: TranscriptEntity) = dao.update(t)
     suspend fun get(id: Long): TranscriptEntity? = dao.get(id)
 }

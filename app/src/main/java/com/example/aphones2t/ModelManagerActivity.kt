@@ -1,7 +1,10 @@
 package com.example.aphones2t
 
 import android.os.Bundle
+import android.text.format.Formatter
 import android.view.View
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Toast
@@ -22,11 +25,20 @@ import kotlinx.coroutines.launch
 
 /**
  * 模型管理界面
- * 支持模型下载、暂停、恢复、删除和设置活动模型
+ * 支持模型下载、暂停、恢复、删除、设置活动模型，以及按语言筛选、按大小排序。
  */
 class ModelManagerActivity : AppCompatActivity(), AddCustomModelDialog.OnModelAddedListener {
 
     private lateinit var binding: ActivityModelManagerBinding
+
+    private var lastStates: List<ModelState> = emptyList()
+    private var languageFilter = "all"
+    private var sortMode = "default"
+
+    private val langLabels = arrayOf("全部", "中文", "中英", "粤语", "英文", "韩语", "法语", "孟加拉语")
+    private val langKeys = arrayOf("all", "zh", "zh+en", "yue", "en", "ko", "fr", "bn")
+    private val sortLabels = arrayOf("默认顺序", "大小从大到小", "大小从小到大")
+    private val sortKeys = arrayOf("default", "desc", "asc")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,11 +49,43 @@ class ModelManagerActivity : AppCompatActivity(), AddCustomModelDialog.OnModelAd
         binding.toolbar.navigationIcon = ContextCompat.getDrawable(this, androidx.appcompat.R.drawable.abc_ic_ab_back_material)
 
         binding.btnAdd.setOnClickListener { addCustom() }
+        binding.btnPaste.setOnClickListener {
+            startActivity(android.content.Intent(this, CustomModelActivity::class.java))
+        }
+
+        setupFilterBar()
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                ModelManager.observeStates(this@ModelManagerActivity).collectLatest { render(it) }
+                ModelManager.observeStates(this@ModelManagerActivity).collectLatest { states ->
+                    lastStates = states
+                    render()
+                }
             }
+        }
+    }
+
+    private fun setupFilterBar() {
+        val langAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, langLabels)
+        langAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        binding.spLanguage.adapter = langAdapter
+        binding.spLanguage.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                languageFilter = langKeys[position.coerceIn(0, langKeys.lastIndex)]
+                render()
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
+        val sortAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, sortLabels)
+        sortAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        binding.spSort.adapter = sortAdapter
+        binding.spSort.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                sortMode = sortKeys[position.coerceIn(0, sortKeys.lastIndex)]
+                render()
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
     }
 
@@ -56,16 +100,35 @@ class ModelManagerActivity : AppCompatActivity(), AddCustomModelDialog.OnModelAd
         // Model states are automatically updated through the observer
     }
 
-    private fun render(states: List<ModelState>) {
+    private fun render() {
+        val filtered = lastStates.filter { matchesLanguage(it.info.language, languageFilter) }
+        val sorted = when (sortMode) {
+            "asc" -> filtered.sortedBy { it.info.downloadSizeBytes }
+            "desc" -> filtered.sortedByDescending { it.info.downloadSizeBytes }
+            else -> filtered
+        }
         binding.container.removeAllViews()
-        if (states.isEmpty()) return
-        states.forEach { binding.container.addView(buildCard(it)) }
+        sorted.forEach { binding.container.addView(buildCard(it)) }
+    }
+
+    private fun matchesLanguage(modelLang: String, filter: String): Boolean = when (filter) {
+        "all" -> true
+        "zh+en" -> modelLang.contains("zh") && modelLang.contains("en")
+        else -> modelLang.contains(filter)
     }
 
     private fun buildCard(state: ModelState): View {
         val b = ItemModelBinding.inflate(layoutInflater, binding.container, false)
         b.tvName.text = state.info.name
-        b.tvDesc.text = state.info.description
+        val sizeText = if (state.info.downloadSizeBytes > 0) {
+            "大小: ${Formatter.formatFileSize(this, state.info.downloadSizeBytes)}"
+        } else {
+            null
+        }
+        b.tvDesc.text = buildString {
+            append(state.info.description)
+            if (sizeText != null) append("\n").append(sizeText)
+        }
 
         val statusText = when (state.status) {
             ModelInstallStatus.NOT_INSTALLED -> getString(R.string.model_status_not_installed)
@@ -95,7 +158,7 @@ class ModelManagerActivity : AppCompatActivity(), AddCustomModelDialog.OnModelAd
         }
 
         if (state.status == ModelInstallStatus.FAILED && !state.error.isNullOrBlank()) {
-            b.tvDesc.text = "${state.info.description}\n错误: ${state.error}"
+            b.tvDesc.text = "${b.tvDesc.text}\n错误: ${state.error}"
         }
 
         b.actions.removeAllViews()
