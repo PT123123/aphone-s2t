@@ -3,19 +3,22 @@ package com.example.aphones2t.data
 import kotlinx.coroutines.flow.Flow
 
 class TranscriptRepository(private val dao: TranscriptDao) {
-    val all: Flow<List<TranscriptEntity>> = dao.observeAll()
+    val history: Flow<List<TranscriptEntity>> = dao.observeHistory()
+    val main: Flow<List<TranscriptEntity>> = dao.observeMain()
 
     suspend fun insert(
         text: String,
         wavPath: String?,
         durationMs: Long,
-        modelName: String
+        modelName: String,
+        showInMain: Boolean = false
     ): Long = dao.insert(
         TranscriptEntity(
             text = text,
             wavPath = wavPath,
             durationMs = durationMs,
-            modelName = modelName
+            modelName = modelName,
+            showInMain = showInMain
         )
     )
 

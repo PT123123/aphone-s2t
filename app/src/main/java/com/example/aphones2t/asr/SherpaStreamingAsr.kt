@@ -192,19 +192,19 @@ class SherpaStreamingAsr {
         }
     }
 
-    /** Final flush: add tail padding once more so the last word is recognized. */
+    /** Final flush: add tail padding so the last word / final partial is decoded into text. */
     fun finalText(): String {
         val rec = recognizer ?: return finalized.toString()
         val s = stream ?: return finalized.toString()
-        if (isParaformer) {
-            val tail = FloatArray((PARAFORMER_TAIL_MS * SAMPLE_RATE / 1000))
-            s.acceptWaveform(tail, SAMPLE_RATE)
-            while (rec.isReady(s)) rec.decode(s)
-            val text = rec.getResult(s).text
-            if (text.isNotBlank()) {
-                if (finalized.isNotEmpty()) finalized.append('\n')
-                finalized.append(text)
-            }
+        // 尾部补静音并读取最终 partial：流式模型（Paraformer / Transducer / CTC）通用做法，
+        // 否则短音频若无端点触发，最后一段识别结果会一直停留在 partial 中而丢失。
+        val tail = FloatArray((PARAFORMER_TAIL_MS * SAMPLE_RATE / 1000))
+        s.acceptWaveform(tail, SAMPLE_RATE)
+        while (rec.isReady(s)) rec.decode(s)
+        val text = rec.getResult(s).text
+        if (text.isNotBlank()) {
+            if (finalized.isNotEmpty()) finalized.append('\n')
+            finalized.append(text)
         }
         return finalized.toString()
     }

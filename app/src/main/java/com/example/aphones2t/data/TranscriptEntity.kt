@@ -11,5 +11,7 @@ data class TranscriptEntity(
     @ColumnInfo(name = "wav_path") val wavPath: String?,
     @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "duration_ms") val durationMs: Long = 0,
-    @ColumnInfo(name = "model_name") val modelName: String = ""
+    @ColumnInfo(name = "model_name") val modelName: String = "",
+    // true = 主窗口「录音列表」显示（本次录音产生）；false = 仅出现在历史记录（导入等）
+    @ColumnInfo(name = "show_in_main") val showInMain: Boolean = false
 )
