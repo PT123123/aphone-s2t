@@ -6,10 +6,6 @@
         android:title="@string/menu_models"
         app:showAsAction="ifRoom" />
     <item
-        android:id="@+id/action_history"
-        android:title="@string/menu_history"
-        app:showAsAction="ifRoom" />
-    <item
         android:id="@+id/action_import"
         android:title="@string/menu_import"
         app:showAsAction="ifRoom" />
