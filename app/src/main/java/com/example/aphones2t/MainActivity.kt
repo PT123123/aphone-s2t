@@ -2,6 +2,8 @@ package com.example.aphones2t
 
 import android.Manifest
 import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -38,6 +40,7 @@ import com.example.aphones2t.model.ModelCatalog
 import com.example.aphones2t.model.ModelManager
 import com.example.aphones2t.utils.AudioFileDecoder
 import com.example.aphones2t.utils.FileTranscriber
+import com.google.android.material.tabs.TabLayout
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
@@ -62,8 +65,12 @@ class MainActivity : AppCompatActivity() {
     private val recordAdapter = MainRecordingsAdapter(
         onPlay = { togglePlay(it) },
         onSeek = { item, pos -> seekTo(item, pos) },
-        onTranscribe = { transcribe(it) }
+        onTranscribe = { transcribe(it) },
+        onCopy = { copyText(it.text) }
     )
+
+    /** 主窗口「非实时转写」Tab 的历史列表控制器。 */
+    private lateinit var historyController: HistoryListController
 
     // ---- 录音播放 ----
     private var player: MediaPlayer? = null
@@ -130,7 +137,6 @@ class MainActivity : AppCompatActivity() {
         binding.toolbar.setOnMenuItemClickListener {
             when (it.itemId) {
                 R.id.action_models -> { startActivity(Intent(this, ModelManagerActivity::class.java)); true }
-                R.id.action_history -> { startActivity(Intent(this, HistoryActivity::class.java)); true }
                 R.id.action_import -> { if (!processing) importLauncher.launch("audio/*"); true }
                 R.id.action_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); true }
                 else -> false
@@ -156,6 +162,28 @@ class MainActivity : AppCompatActivity() {
 
         binding.rvRecordings.layoutManager = LinearLayoutManager(this)
         binding.rvRecordings.adapter = recordAdapter
+
+        // 实时转写 / 非实时转写 两个 Tab 切换显示
+        binding.tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab) {
+                val realtime = tab.position == 0
+                binding.llRealtime.visibility = if (realtime) View.VISIBLE else View.GONE
+                binding.llNonRealtime.visibility = if (realtime) View.GONE else View.VISIBLE
+            }
+
+            override fun onTabUnselected(tab: TabLayout.Tab) {}
+            override fun onTabReselected(tab: TabLayout.Tab) {}
+        })
+
+        // 非实时转写 Tab：复用历史记录列表逻辑（导入 / 离线转写）
+        historyController = HistoryListController(this, binding.rvHistory, binding.tvHistoryEmpty, repo)
+        historyController.start()
+
+        // 实时转写内容一键复制
+        binding.btnCopyTranscript.setOnClickListener {
+            copyText(binding.tvTranscript.text?.toString().orEmpty())
+        }
+
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 repo.main.collectLatest { list ->
@@ -242,6 +270,17 @@ class MainActivity : AppCompatActivity() {
             binding.btnPause.visibility = android.view.View.GONE
             binding.tvStatus.text = getString(R.string.idle_status)
         }
+    }
+
+    /** Copies the given text to the system clipboard, with empty guard. */
+    private fun copyText(text: String) {
+        if (text.isBlank()) {
+            Toast.makeText(this, R.string.nothing_to_copy, Toast.LENGTH_SHORT).show()
+            return
+        }
+        getSystemService(ClipboardManager::class.java)
+            ?.setPrimaryClip(ClipData.newPlainText("transcript", text))
+        Toast.makeText(this, R.string.copied, Toast.LENGTH_SHORT).show()
     }
 
     /** A finished recording goes to the main-window list, not to history. */
@@ -411,7 +450,8 @@ class MainActivity : AppCompatActivity() {
     private class MainRecordingsAdapter(
         private val onPlay: (TranscriptEntity) -> Unit,
         private val onSeek: (TranscriptEntity, Int) -> Unit,
-        private val onTranscribe: (TranscriptEntity) -> Unit
+        private val onTranscribe: (TranscriptEntity) -> Unit,
+        private val onCopy: (TranscriptEntity) -> Unit
     ) : ListAdapter<TranscriptEntity, MainRecordingsAdapter.VH>(DIFF) {
 
         /** Currently playing item id; -1 when nothing plays. */
@@ -464,6 +504,7 @@ class MainActivity : AppCompatActivity() {
 
             holder.binding.btnPlay.setOnClickListener { onPlay(item) }
             holder.binding.btnTranscribe.setOnClickListener { onTranscribe(item) }
+            holder.binding.btnCopy.setOnClickListener { onCopy(item) }
             holder.binding.sbProgress.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                     if (fromUser) {
