@@ -10,6 +10,7 @@ import com.k2fsa.sherpa.onnx.OnlineRecognizer
 import com.k2fsa.sherpa.onnx.OnlineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OnlineStream
 import com.k2fsa.sherpa.onnx.OnlineTransducerModelConfig
+import com.k2fsa.sherpa.onnx.OnlineZipformer2CtcModelConfig
 import java.io.File
 
 /**
@@ -31,17 +32,29 @@ class SherpaStreamingAsr {
         private const val PARAFORMER_TAIL_MS = 800 // right-context padding for last word
 
         /**
-         * Build a recognizer config by scanning [modelDir] for known file names.
+         * Build a recognizer config by scanning [modelDir] for model files.
+         * Scanning is recursive (some archives keep files under exp/ / data/ subfolders)
+         * and matches by role prefix + .onnx suffix instead of exact names, so epoch-style
+         * file names (e.g. encoder-epoch-99-avg-1.int8.onnx) load too. int8 variants are
+         * preferred to keep the on-device footprint small.
+         *
          * Returns null when the directory does not look like a valid streaming model.
          */
         private fun buildConfig(modelDir: File): OnlineRecognizerConfig? {
-            val files = modelDir.listFiles() ?: return null
-            val has = { name: String -> files.any { it.name.equals(name, true) } }
-            val firstMatch = { vararg names: String ->
-                files.firstOrNull { f -> names.any { n -> f.name.equals(n, true) } }?.absolutePath
-            }
+            val all = modelDir.walkTopDown().filter { it.isFile }.toList()
+            if (all.isEmpty()) return null
 
-            val tokens = firstMatch("tokens.txt") ?: return null
+            val tokens = all.firstOrNull { it.name.equals("tokens.txt", true) }
+                ?.absolutePath ?: return null
+
+            fun roleFiles(role: String): List<File> =
+                all.filter { f ->
+                    f.name.startsWith(role, true) && f.name.endsWith(".onnx", true)
+                }.sortedByDescending { it.name.contains("int8", true) }
+
+            val enc = roleFiles("encoder").firstOrNull()
+            val dec = roleFiles("decoder").firstOrNull()
+            val joiner = roleFiles("joiner").firstOrNull()
 
             val config = OnlineRecognizerConfig(
                 featConfig = FeatureConfig(sampleRate = SAMPLE_RATE, featureDim = 80),
@@ -58,21 +71,35 @@ class SherpaStreamingAsr {
                 )
             )
 
-            // Paraformer
-            val enc = firstMatch("encoder.int8.onnx", "encoder.onnx")
-            val dec = firstMatch("decoder.int8.onnx", "decoder.onnx")
-            if (enc != null && dec != null) {
-                config.modelConfig.paraformer = OnlineParaformerModelConfig(encoder = enc, decoder = dec)
+            // Paraformer: encoder + decoder, no joiner
+            if (enc != null && dec != null && joiner == null) {
+                config.modelConfig.paraformer =
+                    OnlineParaformerModelConfig(encoder = enc.absolutePath, decoder = dec.absolutePath)
                 config.modelConfig.modelType = "paraformer"
                 return config
             }
 
-            // Transducer (zipformer / lstm / etc.)
-            val joiner = firstMatch("joiner.int8.onnx", "joiner.onnx")
+            // Streaming Zipformer-CTC: encoder + tokens, no decoder/joiner.
+            // These are the smallest official streaming models (~20 MB int8).
+            if (enc != null && dec == null) {
+                config.modelConfig.zipformer2Ctc =
+                    OnlineZipformer2CtcModelConfig(model = enc.absolutePath)
+                config.modelConfig.modelType = "zipformer2_ctc"
+                return config
+            }
+
+            // Transducer: encoder + decoder + joiner (zipformer / zipformer2 /
+            // conformer / lstm / ebranchformer). modelType is left empty so
+            // sherpa-onnx reads the "model_type" metadata embedded in the ONNX
+            // encoder and picks the right implementation automatically.
             if (enc != null && dec != null && joiner != null) {
                 config.modelConfig.transducer =
-                    OnlineTransducerModelConfig(encoder = enc, decoder = dec, joiner = joiner)
-                config.modelConfig.modelType = "zipformer2"
+                    OnlineTransducerModelConfig(
+                        encoder = enc.absolutePath,
+                        decoder = dec.absolutePath,
+                        joiner = joiner.absolutePath
+                    )
+                config.modelConfig.modelType = ""
                 return config
             }
 

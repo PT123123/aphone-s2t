@@ -63,6 +63,9 @@ class TranscriptionService : Service() {
     private var hasError = false
     private var wakeLock: PowerManager.WakeLock? = null
 
+    /** True when recording in record-only mode (no ASR model installed yet). */
+    private var noModel = false
+
     private var outputWav: File? = null
     private var outputTxt: File? = null
     private var startedAt = 0L
@@ -102,7 +105,10 @@ class TranscriptionService : Service() {
 
     private fun notification() = NotificationCompat.Builder(this, CHANNEL_ID)
         .setContentTitle(getString(R.string.notification_title))
-        .setContentText(getString(R.string.notification_content))
+        .setContentText(
+            if (noModel) getString(R.string.notification_no_model)
+            else getString(R.string.notification_content)
+        )
         .setSmallIcon(android.R.drawable.ic_btn_speak_now)
         .setContentIntent(
             PendingIntent.getActivity(
@@ -115,7 +121,11 @@ class TranscriptionService : Service() {
         .build()
 
     private fun broadcast(action: String, text: String = "") {
-        sendBroadcast(Intent(action).putExtra(EXTRA_TEXT, text))
+        sendBroadcast(
+            Intent(action)
+                .setPackage(packageName)
+                .putExtra(EXTRA_TEXT, text)
+        )
     }
 
     private fun startRecording() {
@@ -125,20 +135,21 @@ class TranscriptionService : Service() {
         pcm.reset()
 
         val modelDir = ModelManager.getActiveModelDirectory(this)
-        if (modelDir == null || !SherpaStreamingAsr.isModelValid(modelDir)) {
-            broadcast(ACTION_ERROR, getString(R.string.model_not_ready))
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-            return
-        }
-
-        asr = SherpaStreamingAsr()
-        if (!asr!!.init(modelDir)) {
-            broadcast(ACTION_ERROR, "ASR 初始化失败")
-            asr?.release(); asr = null
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-            return
+        // Record-only mode when no usable model: audio is still captured & saved,
+        // transcription is deferred until a model is installed.
+        if (modelDir != null && SherpaStreamingAsr.isModelValid(modelDir)) {
+            noModel = false
+            asr = SherpaStreamingAsr()
+            if (!asr!!.init(modelDir)) {
+                broadcast(ACTION_ERROR, "ASR 初始化失败")
+                asr?.release(); asr = null
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+                return
+            }
+        } else {
+            noModel = true
+            asr = null
         }
 
         val minBuf = AudioRecord.getMinBufferSize(
@@ -221,6 +232,7 @@ class TranscriptionService : Service() {
     }
 
     private fun stopRecording() {
+        Log.d(TAG, "stopRecording called recording=$recording hasError=$hasError")
         if (!recording && !hasError) return
         recording = false
         paused = false
@@ -233,7 +245,9 @@ class TranscriptionService : Service() {
             if (pcmBytes.size > SAMPLE_RATE * 2) { // at least 1s of audio
                 saveWav(pcmBytes)
                 saveTranscript(finalText, durationMs)
+                Log.d(TAG, "broadcasting FINAL wav=${outputWav?.absolutePath} text='$finalText'")
                 val i = Intent(ACTION_FINAL)
+                    .setPackage(packageName)
                     .putExtra(EXTRA_TEXT, finalText)
                     .putExtra(EXTRA_WAV, outputWav?.absolutePath ?: "")
                     .putExtra(EXTRA_DURATION, durationMs)
@@ -296,7 +310,11 @@ class TranscriptionService : Service() {
 
     private fun saveTranscript(text: String, durationMs: Long) {
         val f = outputTxt ?: return
-        val body = if (text.isBlank()) "[未检测到语音]" else text
+        val body = when {
+            text.isNotBlank() -> text
+            noModel -> "[已录音，等待下载模型后转写]"
+            else -> "[未检测到语音]"
+        }
         val duration = SimpleDateFormat("mm:ss", Locale.getDefault()).format(Date(durationMs))
         try {
             f.writeText(

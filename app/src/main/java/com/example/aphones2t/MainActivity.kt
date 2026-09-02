@@ -6,8 +6,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.OpenableColumns
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -17,18 +20,30 @@ import com.example.aphones2t.data.TranscriptRepository
 import com.example.aphones2t.databinding.ActivityMainBinding
 import com.example.aphones2t.model.ModelCatalog
 import com.example.aphones2t.model.ModelManager
+import com.example.aphones2t.utils.AudioFileDecoder
+import com.example.aphones2t.utils.FileTranscriber
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.io.File
+import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private var recording = false
     private var paused = false
+    private var processing = false
     private val repo by lazy {
         TranscriptRepository(AppDatabase.get(this).transcriptDao())
     }
+
+    private val importLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri -> uri?.let { importAudio(it) } }
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -47,9 +62,11 @@ class MainActivity : AppCompatActivity() {
             val text = i.getStringExtra(TranscriptionService.EXTRA_TEXT) ?: ""
             val wav = i.getStringExtra(TranscriptionService.EXTRA_WAV)
             val dur = i.getLongExtra(TranscriptionService.EXTRA_DURATION, 0L)
+            Log.d("MainActivity", "FINAL received text=$text wav=$wav dur=$dur")
             binding.tvTranscript.text = text
             updateUI()
-            if (text.isNotBlank()) saveToHistory(text, wav, dur)
+            // Recordings made without a model still land in history as pending.
+            if (text.isNotBlank() || !wav.isNullOrBlank()) saveToHistory(text, wav, dur)
         }
     }
     private val errorReceiver = object : BroadcastReceiver() {
@@ -69,6 +86,7 @@ class MainActivity : AppCompatActivity() {
             when (it.itemId) {
                 R.id.action_models -> { startActivity(Intent(this, ModelManagerActivity::class.java)); true }
                 R.id.action_history -> { startActivity(Intent(this, HistoryActivity::class.java)); true }
+                R.id.action_import -> { if (!processing) importLauncher.launch("audio/*"); true }
                 R.id.action_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); true }
                 else -> false
             }
@@ -116,7 +134,7 @@ class MainActivity : AppCompatActivity() {
     private fun refreshModelStatus() {
         val ready = ModelManager.getActiveModelDirectory(this) != null
         if (!ready) {
-            binding.tvTranscript.hint = getString(R.string.hint_wait_model)
+            binding.tvTranscript.hint = getString(R.string.hint_no_model)
         } else if (!recording) {
             binding.tvTranscript.hint = getString(R.string.hint_ready)
         }
@@ -128,16 +146,7 @@ class MainActivity : AppCompatActivity() {
             Manifest.permission.RECORD_AUDIO,
             Manifest.permission.POST_NOTIFICATIONS
         ).filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
-        if (needed.isEmpty()) {
-            if (ModelManager.getActiveModelDirectory(this) == null) {
-                Toast.makeText(this, getString(R.string.model_not_ready), Toast.LENGTH_SHORT).show()
-                startActivity(Intent(this, ModelManagerActivity::class.java))
-                return
-            }
-            startRecording()
-        } else {
-            permissionLauncher.launch(needed.toTypedArray())
-        }
+        if (needed.isEmpty()) startRecording() else permissionLauncher.launch(needed.toTypedArray())
     }
 
     private fun startRecording() {
@@ -155,8 +164,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateUI() {
-        val ready = ModelManager.getActiveModelDirectory(this) != null
-        binding.btnRecord.isEnabled = ready
+        binding.btnRecord.isEnabled = !processing
         if (recording) {
             binding.btnRecord.text = getString(R.string.stop_recording)
             binding.btnRecord.setBackgroundColor(getColor(R.color.rec))
@@ -173,9 +181,83 @@ class MainActivity : AppCompatActivity() {
 
     private fun saveToHistory(text: String, wav: String?, durationMs: Long) {
         val id = ModelManager.getActiveModelId(this)
-        val modelName = id?.let { ModelCatalog.findById(this, it)?.name } ?: "sherpa-onnx"
+        val modelName = id?.let { ModelCatalog.findById(this, it)?.name }
+            ?: getString(R.string.pending_transcribe)
         CoroutineScope(Dispatchers.IO).launch {
-            repo.insert(text, wav, durationMs, modelName)
+            try {
+                val rowId = repo.insert(text, wav, durationMs, modelName)
+                Log.d("MainActivity", "inserted rowId=$rowId text='$text'")
+            } catch (e: Exception) {
+                Log.e("MainActivity", "insert failed", e)
+            }
         }
+    }
+
+    /** Copies a picked audio file into app storage and transcribes it if a model is ready. */
+    private fun importAudio(uri: Uri) {
+        if (processing) return
+        processing = true
+        binding.tvStatus.text = getString(R.string.importing_status)
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val ts = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                val originalName = queryDisplayName(uri) ?: "import_$ts"
+                val ext = originalName.substringAfterLast('.', "").ifBlank { "m4a" }
+                val dir = File(filesDir, "recordings").apply { if (!exists()) mkdirs() }
+                val dest = File(dir, "import_$ts.$ext")
+                contentResolver.openInputStream(uri)?.use { input ->
+                    dest.outputStream().use { output -> input.copyTo(output) }
+                } ?: throw IOException("无法读取所选文件")
+
+                val modelDir = ModelManager.getActiveModelDirectory(this@MainActivity)
+                var text = ""
+                var durationMs = 0L
+                var modelName = getString(R.string.pending_transcribe)
+                if (modelDir != null) {
+                    val r = FileTranscriber.transcribe(this@MainActivity, modelDir, dest.absolutePath)
+                    if (r != null) {
+                        text = r.text
+                        durationMs = r.durationMs
+                        modelName = ModelManager.getActiveModelId(this@MainActivity)
+                            ?.let { ModelCatalog.findById(this@MainActivity, it)?.name } ?: "sherpa-onnx"
+                    }
+                } else {
+                    // No model: still record duration so the pending entry is informative.
+                    durationMs = AudioFileDecoder
+                        .decodeToPcm16kMono(this@MainActivity, dest.absolutePath)
+                        ?.size?.div(16)?.toLong() ?: 0L
+                }
+                repo.insert(text, dest.absolutePath, durationMs, modelName)
+                runOnUiThread {
+                    Toast.makeText(
+                        this@MainActivity,
+                        if (text.isNotBlank()) getString(R.string.import_success)
+                        else getString(R.string.import_pending),
+                        Toast.LENGTH_LONG
+                    ).show()
+                    processing = false
+                    updateUI()
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    Toast.makeText(
+                        this@MainActivity,
+                        getString(R.string.import_failed, e.message ?: e.javaClass.simpleName),
+                        Toast.LENGTH_LONG
+                    ).show()
+                    processing = false
+                    updateUI()
+                }
+            }
+        }
+    }
+
+    private fun queryDisplayName(uri: Uri): String? = try {
+        contentResolver.query(uri, null, null, null, null)?.use { c ->
+            val idx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (idx >= 0 && c.moveToFirst()) c.getString(idx) else null
+        }
+    } catch (_: Exception) {
+        null
     }
 }

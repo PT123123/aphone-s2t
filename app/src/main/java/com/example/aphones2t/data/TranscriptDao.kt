@@ -4,12 +4,16 @@ import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TranscriptDao {
     @Insert
     suspend fun insert(t: TranscriptEntity): Long
+
+    @Update
+    suspend fun update(t: TranscriptEntity)
 
     @Query("SELECT * FROM transcripts ORDER BY created_at DESC")
     fun observeAll(): Flow<List<TranscriptEntity>>

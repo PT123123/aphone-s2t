@@ -59,10 +59,10 @@ object ModelManager {
     }
 
     private fun hasCoreFiles(dir: File): Boolean {
-        val files = dir.listFiles() ?: return false
+        val files = dir.walkTopDown().filter { it.isFile }.toList()
         val names = files.map { it.name.lowercase() }
         return names.contains("tokens.txt") &&
-            (names.any { it.startsWith("encoder") && it.endsWith(".onnx") })
+            names.any { it.startsWith("encoder") && it.endsWith(".onnx") }
     }
 
     // ---- active model ----
