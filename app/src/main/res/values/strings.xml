@@ -18,7 +18,11 @@
     <!-- 无模型录音 / 导入 -->
     <string name="notification_no_model">仅录音（未加载识别模型）</string>
     <string name="pending_transcribe">待转写</string>
-    <string name="history_pending">[待转写] 下载模型后可在详情中点击「转写」</string>
+    <string name="history_pending_no_model">[待转写] 请先下载识别模型，下载后即可在此转写</string>
+    <string name="history_pending_ready">[待转写] 点击「转写」即可开始</string>
+    <string name="history_pending_transcribing">[待转写] 正在转写…</string>
+    <string name="history_pending_empty">[未识别到语音] 该录音中未检测到语音内容</string>
+    <string name="transcribe_empty">未识别到语音</string>
     <string name="importing_status">正在导入 / 转写…</string>
     <string name="transcribing_status">正在转写…</string>
     <string name="import_pending">音频已导入，下载模型后可在历史记录中转写</string>
@@ -93,6 +97,11 @@
     <string name="copy">复制</string>
     <string name="share">分享</string>
     <string name="play">播放</string>
+
+    <!-- 主窗口录音列表 -->
+    <string name="recordings_label">录音列表</string>
+    <string name="recordings_empty">暂无录音，录完一条会显示在这里</string>
+    <string name="stop_playback">停止</string>
 
     <!-- 设置界面 -->
     <string name="settings_title">设置</string>
