@@ -36,3 +36,7 @@ _refs/
 build_shot*
 dbcheck/
 dbcheck2/
+
+# Local scratch folders (docs, screenshots, db dumps, tmp build outputs)
+_artifacts/
+_aar_tmp/
