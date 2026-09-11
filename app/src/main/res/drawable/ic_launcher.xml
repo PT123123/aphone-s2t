@@ -3,9 +3,30 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <group android:translateX="32" android:translateY="30">
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M22,12a4,4 0,0 1,-4 4H8a4,4 0,0 1,-4 -4v-2h4v2h10V10H4V8a6,6 0,0 1,12 0v4a6,6 0,0 1,6 6v8a4,4 0,0 1,-4 4H10a4,4 0,0 1,-4 -4v-8h4v8h10v-8a6,6 0,0 0,-12 0V14h16z" />
-    </group>
+
+    <!-- 麦克风头部（蓝色） -->
+    <path
+        android:fillColor="#1565C0"
+        android:pathData="M54,22c-8.8,0 -16,7.2 -16,16v10c0,8.8 7.2,16 16,16c8.8,0 16,-7.2 16,-16v-10C70,29.2 62.8,22 54,22z" />
+
+    <!-- 麦克风支架 U 形（蓝色） -->
+    <path
+        android:fillColor="#1565C0"
+        android:pathData="M40,58c0,8.8 6.2,16.2 14.4,17.7v6.3h-7.4c-1.5,0 -2.7,1.2 -2.7,2.7s1.2,2.7 2.7,2.7h14c1.5,0 2.7,-1.2 2.7,-2.7s-1.2,-2.7 -2.7,-2.7h-7.4v-6.3C61.8,74.2 68,66.8 68,58h-5c0,6.6 -4.5,12 -9,12s-9,-5.4 -9,-12H40z" />
+
+    <!-- 左侧声波（浅蓝） -->
+    <path
+        android:fillColor="#42A5F5"
+        android:pathData="M32,38c-4,4 -4,10 0,14l3,-3c-2.4,-2.4 -2.4,-5.6 0,-8L32,38z" />
+    <path
+        android:fillColor="#90CAF9"
+        android:pathData="M24,30c-7,7 -7,21 0,28l3,-3.5c-5.2,-5.2 -5.2,-15.8 0,-21L24,30z" />
+
+    <!-- 右侧声波（浅蓝） -->
+    <path
+        android:fillColor="#42A5F5"
+        android:pathData="M76,38c4,4 4,10 0,14l-3,-3c2.4,-2.4 2.4,-5.6 0,-8L76,38z" />
+    <path
+        android:fillColor="#90CAF9"
+        android:pathData="M84,30c7,7 7,21 0,28l-3,-3.5c5.2,-5.2 5.2,-15.8 0,-21L84,30z" />
 </vector>
