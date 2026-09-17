@@ -124,7 +124,7 @@ cmd_publish() {
 
     read vc vn < <(get_ver "$root")
     arch="$DIST/${p}-${vn}.apk"
-    notes="$DIST/notes-$p.md"
+    notes="$(to_native "$DIST/notes-$p.md")"
     cat > "$notes" <<EOF
 # $p v$vn (build $vc)
 
