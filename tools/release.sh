@@ -43,9 +43,9 @@ get_ver() {
 # Source fingerprint = sha256 of every tracked + untracked(non-ignored) source file's git blob.
 # Stored at build time; compared again at publish to catch "changed code, forgot to rebuild".
 fingerprint() {
-  git -C "$1" ls-files --cached --others --exclude-standard -- \
+  ( cd "$1" && git ls-files --cached --others --exclude-standard -- \
       app/src app/build.gradle build.gradle settings.gradle gradle.properties \
-    | sort | tr '\n' '\0' | xargs -0 git -C "$1" hash-object | sha256sum | awk '{print $1}'
+    | sort | tr '\n' '\0' | xargs -0 git hash-object | sha256sum | awk '{print $1}' )
 }
 
 package_one() {
@@ -104,13 +104,13 @@ cmd_publish() {
     apk="$DIST/$fixed"
 
     # GATE 1: source tree clean (only the source paths we fingerprint)
-    dirty=$(git -C "$root" status --porcelain -- app/src app/build.gradle build.gradle settings.gradle gradle.properties)
+    dirty=$(gin "$root" status --porcelain -- app/src app/build.gradle build.gradle settings.gradle gradle.properties)
     if [ -n "$dirty" ]; then echo "GATE1 FAIL [$repo] uncommitted source:"; echo "$dirty"; exit 1; fi
 
     # GATE 2: HEAD pushed to origin/<branch>
-    branch=$(git -C "$root" branch --show-current)
-    sha=$(git -C "$root" rev-parse HEAD)
-    rsha=$(git -C "$root" rev-parse "origin/$branch" 2>/dev/null || echo NONE)
+    branch=$(gin "$root" rev-parse --abbrev-ref HEAD)
+    sha=$(gin "$root" rev-parse HEAD)
+    rsha=$(gin "$root" rev-parse "origin/$branch" 2>/dev/null || echo NONE)
     if [ "$sha" != "$rsha" ]; then echo "GATE2 FAIL [$repo] HEAD not on origin/$branch ($sha vs $rsha). Push first."; exit 1; fi
 
     # GATE 3: APK built from the current source
