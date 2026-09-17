@@ -48,10 +48,10 @@ class SettingsActivity : AppCompatActivity() {
                 true
             }
 
-            // 管理模型
+            // 管理模型：直接打开主界面的「模型」页（模型列表已并入主界面，避免两套页面）
             val manageModelsPref = findPreference<Preference>("manage_models")
             manageModelsPref?.setOnPreferenceClickListener {
-                startActivity(Intent(requireContext(), ModelManagerActivity::class.java))
+                openMainTab(MainActivity.TAB_MODELS)
                 true
             }
 
@@ -62,15 +62,24 @@ class SettingsActivity : AppCompatActivity() {
                 true
             }
 
-            // 管理录音
+            // 管理录音：直接打开主界面的「录音」页
             val manageRecordingsPref = findPreference<Preference>("manage_recordings")
             manageRecordingsPref?.setOnPreferenceClickListener {
-                startActivity(Intent(requireContext(), HistoryActivity::class.java))
+                openMainTab(MainActivity.TAB_RECORDINGS)
                 true
             }
 
             // 初始化存储信息
             updateStorageInfo()
+        }
+
+        /** 清掉中间页，直接回到主界面并切到指定页面。 */
+        private fun openMainTab(tab: Int) {
+            startActivity(
+                Intent(requireContext(), MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    .putExtra(MainActivity.EXTRA_TAB, tab)
+            )
         }
 
         private fun setupAboutPreferences() {
