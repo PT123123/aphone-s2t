@@ -12,6 +12,7 @@
         app:menu="@menu/main_menu"
         app:title="@string/app_name" />
 
+    <!-- 三个页面：实时转写 / 录音 / 模型 -->
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/tabLayout"
         android:layout_width="match_parent"
@@ -27,7 +28,12 @@
         <com.google.android.material.tabs.TabItem
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/tab_non_realtime" />
+            android:text="@string/tab_recordings" />
+
+        <com.google.android.material.tabs.TabItem
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/tab_models" />
     </com.google.android.material.tabs.TabLayout>
 
     <FrameLayout
@@ -35,7 +41,7 @@
         android:layout_height="0dp"
         android:layout_weight="1">
 
-        <!-- ================= 实时转写 Tab ================= -->
+        <!-- ===================== ① 实时转写 ===================== -->
         <LinearLayout
             android:id="@+id/llRealtime"
             android:layout_width="match_parent"
@@ -43,10 +49,88 @@
             android:orientation="vertical"
             android:padding="12dp">
 
+            <!-- 当前模型卡片 -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardElevation="1dp"
+                app:strokeWidth="0dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingStart="14dp"
+                    android:paddingTop="10dp"
+                    android:paddingEnd="8dp"
+                    android:paddingBottom="8dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/tvCurrentModelLabel"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/current_model_label"
+                            android:textColor="?android:attr/textColorSecondary"
+                            android:textSize="12sp" />
+
+                        <Button
+                            android:id="@+id/btnSwitchModel"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:minWidth="0dp"
+                            android:minHeight="0dp"
+                            android:paddingStart="14dp"
+                            android:paddingTop="4dp"
+                            android:paddingEnd="14dp"
+                            android:paddingBottom="4dp"
+                            android:text="@string/switch_model"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvCurrentModelName"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/current_model_none"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvCurrentModelMeta"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="@string/current_model_none_hint"
+                        android:textColor="?android:attr/textColorSecondary"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/btnManageModel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="?attr/selectableItemBackground"
+                        android:paddingTop="6dp"
+                        android:paddingEnd="12dp"
+                        android:paddingBottom="4dp"
+                        android:text="@string/manage_models"
+                        android:textColor="?attr/colorPrimary"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <TextView
                 android:id="@+id/tvStatus"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
                 android:text="@string/idle_status"
                 android:textColor="?attr/colorPrimary"
                 android:textStyle="bold" />
@@ -54,14 +138,14 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
+                android:layout_marginTop="6dp"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
                 <TextView
                     android:layout_width="0dp"
-                    android:layout_weight="1"
                     android:layout_height="wrap_content"
+                    android:layout_weight="1"
                     android:text="@string/transcript_label"
                     android:textColor="?attr/colorPrimary"
                     android:textStyle="bold" />
@@ -73,8 +157,8 @@
                     android:minWidth="0dp"
                     android:minHeight="0dp"
                     android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
                     android:paddingTop="4dp"
+                    android:paddingEnd="12dp"
                     android:paddingBottom="4dp"
                     android:text="@string/copy"
                     android:textSize="12sp" />
@@ -83,51 +167,19 @@
             <ScrollView
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
-                android:layout_weight="1"
-                android:layout_marginTop="4dp">
+                android:layout_marginTop="4dp"
+                android:layout_weight="1">
 
                 <TextView
                     android:id="@+id/tvTranscript"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:hint="@string/hint_ready"
                     android:minHeight="140dp"
                     android:padding="12dp"
-                    android:textSize="18sp"
                     android:textIsSelectable="true"
-                    android:hint="@string/hint_ready" />
+                    android:textSize="18sp" />
             </ScrollView>
-
-            <TextView
-                android:id="@+id/tvRecordingsLabel"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/recordings_label"
-                android:textColor="?attr/colorPrimary"
-                android:textStyle="bold"
-                android:visibility="gone" />
-
-            <FrameLayout
-                android:layout_width="match_parent"
-                android:layout_height="200dp"
-                android:layout_marginTop="4dp"
-                android:layout_marginBottom="4dp">
-
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/rvRecordings"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:clipToPadding="false"
-                    android:paddingBottom="4dp" />
-
-                <TextView
-                    android:id="@+id/tvRecordingsEmpty"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:gravity="center"
-                    android:text="@string/recordings_empty"
-                    android:textColor="?android:attr/textColorSecondary"
-                    android:visibility="gone" />
-            </FrameLayout>
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -138,10 +190,10 @@
                 <Button
                     android:id="@+id/btnRecord"
                     android:layout_width="0dp"
-                    android:layout_weight="1"
                     android:layout_height="wrap_content"
-                    android:text="@string/start_recording"
-                    android:enabled="false" />
+                    android:layout_weight="1"
+                    android:enabled="false"
+                    android:text="@string/start_recording" />
 
                 <Button
                     android:id="@+id/btnPause"
@@ -153,30 +205,210 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- ================= 非实时转写 Tab ================= -->
+        <!-- ===================== ② 录音 ===================== -->
         <LinearLayout
-            android:id="@+id/llNonRealtime"
+            android:id="@+id/llRecordings"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:orientation="vertical"
-            android:padding="4dp"
             android:visibility="gone">
 
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvHistory"
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:clipToPadding="false"
-                android:paddingBottom="8dp" />
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="12dp"
+                android:paddingTop="8dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="4dp">
 
-            <TextView
-                android:id="@+id/tvHistoryEmpty"
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnImportAudio"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minWidth="0dp"
+                    android:text="@string/menu_import"
+                    android:textSize="12sp" />
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:layout_weight="1" />
+
+                <TextView
+                    android:id="@+id/tvRecordingsCount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="?android:attr/textColorSecondary"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <FrameLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1">
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/rvRecordings"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipToPadding="false"
+                    android:paddingBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/tvRecordingsEmpty"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:padding="24dp"
+                    android:text="@string/recordings_empty"
+                    android:textColor="?android:attr/textColorSecondary" />
+            </FrameLayout>
+        </LinearLayout>
+
+        <!-- ===================== ③ 模型 ===================== -->
+        <LinearLayout
+            android:id="@+id/llModels"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingStart="12dp"
+                android:paddingTop="8dp"
+                android:paddingEnd="12dp">
+
+                <!-- 状态筛选：未下载 / 下载中 / 已下载 -->
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/chipGroupStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    app:selectionRequired="true"
+                    app:singleLine="false"
+                    app:singleSelection="true">
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipAll"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true"
+                        android:text="@string/filter_all" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipNotInstalled"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/filter_not_installed" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipInProgress"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/filter_in_progress" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chipInstalled"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/filter_installed" />
+                </com.google.android.material.chip.ChipGroup>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/filter_language"
+                        android:textColor="?android:attr/textColorSecondary"
+                        android:textSize="13sp" />
+
+                    <Spinner
+                        android:id="@+id/spLanguage"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:layout_weight="1" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:text="@string/sort_by"
+                        android:textColor="?android:attr/textColorSecondary"
+                        android:textSize="13sp" />
+
+                    <Spinner
+                        android:id="@+id/spSort"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:layout_weight="1" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1">
+
+                <ScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
+
+                    <LinearLayout
+                        android:id="@+id/llModelContainer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="12dp" />
+                </ScrollView>
+
+                <TextView
+                    android:id="@+id/tvModelEmpty"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:padding="24dp"
+                    android:text="@string/filter_empty"
+                    android:textColor="?android:attr/textColorSecondary"
+                    android:visibility="gone" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:gravity="center"
-                android:text="@string/history_empty"
-                android:textColor="?android:attr/textColorSecondary"
-                android:visibility="gone" />
+                android:orientation="horizontal"
+                android:padding="10dp">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnAddModel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="10dp"
+                    android:text="@string/custom_model_add" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnPasteModels"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_paste_custom_models" />
+            </LinearLayout>
         </LinearLayout>
     </FrameLayout>
 </LinearLayout>

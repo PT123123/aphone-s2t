@@ -23,8 +23,14 @@ import java.io.File
  * File layout is auto-detected from the model directory so the same code path
  * works for the bundled bilingual Paraformer and for any custom model URL the
  * user pastes in the model manager.
+ *
+ * 除文本外还会记录每段的起止时间（以「端点检测」为切分点，按已送入的真实采样
+ * 数换算毫秒），这样列表里点某一句就能跳到录音的对应位置。
  */
 class SherpaStreamingAsr {
+
+    /** 一段识别结果及其在录音中的时间区间。 */
+    data class Segment(val startMs: Long, val endMs: Long, val text: String)
 
     companion object {
         private const val TAG = "SherpaStreamingAsr"
@@ -132,6 +138,15 @@ class SherpaStreamingAsr {
     /** Accumulated finalized text (segments ended at an endpoint). */
     private var finalized = StringBuilder()
 
+    /** 已切分的段落（带时间轴）。 */
+    private val segments = mutableListOf<Segment>()
+
+    /** 已送入识别器的「真实」采样数（不含补的静音尾巴）。 */
+    private var fedSamples = 0L
+
+    /** 当前段落开始处的采样数。 */
+    private var segmentStartSamples = 0L
+
     /** Whether the currently loaded model is a Paraformer (needs tail padding). */
     private val isParaformer: Boolean get() = modelType == "paraformer"
 
@@ -143,6 +158,9 @@ class SherpaStreamingAsr {
             modelType = cfg.modelConfig.modelType
             stream = recognizer!!.createStream()
             finalized.setLength(0)
+            segments.clear()
+            fedSamples = 0L
+            segmentStartSamples = 0L
             isReady = true
             Log.i(TAG, "ASR ready (modelType=$modelType) from ${modelDir.absolutePath}")
             true
@@ -163,6 +181,7 @@ class SherpaStreamingAsr {
         val rec = recognizer ?: return finalized.toString()
         val s = stream ?: return finalized.toString()
 
+        fedSamples += samples.size
         s.acceptWaveform(samples, SAMPLE_RATE)
         while (rec.isReady(s)) rec.decode(s)
 
@@ -179,9 +198,11 @@ class SherpaStreamingAsr {
         if (endpoint) {
             rec.reset(s)
             if (text.isNotBlank()) {
+                pushSegment(text)
                 if (finalized.isNotEmpty()) finalized.append('\n')
-                finalized.append(text)
+                finalized.append(text.trim())
             }
+            segmentStartSamples = fedSamples
             return finalized.toString()
         }
 
@@ -203,11 +224,15 @@ class SherpaStreamingAsr {
         while (rec.isReady(s)) rec.decode(s)
         val text = rec.getResult(s).text
         if (text.isNotBlank()) {
+            pushSegment(text)
             if (finalized.isNotEmpty()) finalized.append('\n')
-            finalized.append(text)
+            finalized.append(text.trim())
         }
         return finalized.toString()
     }
+
+    /** 目前已经切分好的段落（不含仍在识别的 partial）。 */
+    fun segments(): List<Segment> = segments.toList()
 
     fun release() {
         try { stream?.release() } catch (_: Exception) {}
@@ -216,5 +241,14 @@ class SherpaStreamingAsr {
         recognizer = null
         isReady = false
         finalized.setLength(0)
+        segments.clear()
+        fedSamples = 0L
+        segmentStartSamples = 0L
+    }
+
+    private fun pushSegment(text: String) {
+        val startMs = segmentStartSamples * 1000L / SAMPLE_RATE
+        val endMs = (fedSamples * 1000L / SAMPLE_RATE).coerceAtLeast(startMs + 300L)
+        segments.add(Segment(startMs = startMs, endMs = endMs, text = text.trim()))
     }
 }

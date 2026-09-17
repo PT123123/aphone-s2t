@@ -170,4 +170,94 @@
     <string name="faq_answer7">模型下载时需要网络连接，但识别过程完全离线运行。模型下载完成后，即使在没有网络的情况下也能正常使用语音识别功能。</string>
     <string name="faq_question8">如何清理存储空间？</string>
     <string name="faq_answer8">在"设置"→"存储管理"中可以清理缓存、管理模型和录音文件。删除不需要的模型和历史记录可以释放大量存储空间。</string>
+    <!-- ============ 页面结构（转写 / 录音 / 模型） ============ -->
+    <string name="tab_recordings">录音</string>
+    <string name="tab_models">模型</string>
+    <string name="recordings_title">录音</string>
+    <string name="recordings_count">共 %1$d 条</string>
+    <string name="more_actions">更多</string>
+    <string name="timeline_hint">点击任意一句可跳到对应时间</string>
+    <string name="action_rebuild_timeline">生成时间轴</string>
+    <string name="rebuild_timeline_need_model">需要已下载的模型才能生成时间轴</string>
+    <string name="rebuild_timeline_done">时间轴已生成</string>
+    <string name="rebuild_timeline_failed">时间轴生成失败</string>
+    <string name="no_audio_file">无音频文件</string>
+    <string name="playback_failed">播放失败</string>
+    <string name="recordings_expand">展开全文</string>
+    <string name="recordings_collapse">收起</string>
+
+    <!-- ============ 实时转写页：当前模型 ============ -->
+    <string name="current_model_label">当前模型</string>
+    <string name="current_model_none">未选择模型</string>
+    <string name="current_model_none_hint">下载并选择一个模型后即可实时转写（现在录音仍然可用，之后再转写）</string>
+    <string name="switch_model">切换</string>
+    <string name="manage_models">管理</string>
+    <string name="model_switch_title">选择识别模型</string>
+    <string name="model_switch_hint">切换后从下次开始录音起生效</string>
+    <string name="model_switch_recording_hint">正在录音，将在本次录音结束后生效</string>
+    <string name="model_switch_no_installed">还没有已下载的模型</string>
+    <string name="go_download_model">去「模型」页下载</string>
+
+    <!-- ============ 模型管理：筛选 ============ -->
+    <string name="filter_status">状态</string>
+    <string name="filter_all">全部</string>
+    <string name="filter_not_installed">未下载</string>
+    <string name="filter_in_progress">下载中</string>
+    <string name="filter_installed">已下载</string>
+    <string name="filter_empty">没有符合筛选条件的模型</string>
+
+    <!-- ============ 模型卡片：进度 / 详情 / 失败原因 ============ -->
+    <string name="model_details">详情</string>
+    <string name="model_details_hide">收起</string>
+    <string name="progress_bytes">%1$s / %2$s</string>
+    <string name="progress_speed">%1$s · 剩余 %2$s</string>
+    <string name="progress_no_total">已下载 %1$s · 总大小未知</string>
+    <string name="model_failed_prefix">失败原因：%1$s</string>
+    <string name="model_error_dialog_title">下载失败详情</string>
+    <string name="action_retry">重试</string>
+    <string name="action_copy_details">复制详情</string>
+    <string name="details_copied">已复制到剪贴板</string>
+    <string name="download_continues_hint">下载在后台继续，退出本页面不影响</string>
+
+    <string name="detail_status">状态</string>
+    <string name="detail_stage">当前阶段</string>
+    <string name="detail_language">支持语言</string>
+    <string name="detail_engine">识别引擎</string>
+    <string name="detail_download_size">下载体积</string>
+    <string name="detail_installed_size">已安装体积</string>
+    <string name="detail_downloaded">已下载</string>
+    <string name="detail_speed">下载速度</string>
+    <string name="detail_eta">预计剩余</string>
+    <string name="detail_url">下载地址</string>
+    <string name="detail_install_path">安装位置</string>
+    <string name="detail_error_time">失败时间</string>
+    <string name="detail_error_type">异常类型</string>
+    <string name="detail_error_message">失败原因</string>
+    <string name="detail_error_cause">底层原因</string>
+    <string name="detail_error_stage">失败阶段</string>
+    <string name="detail_error_http">HTTP 状态码</string>
+    <string name="detail_error_bytes">失败时已下载</string>
+    <string name="detail_log">下载日志</string>
+    <string name="detail_stack">堆栈摘要</string>
+    <string name="detail_none">—</string>
+
+    <string name="stage_init">准备中</string>
+    <string name="stage_queued">等待网络</string>
+    <string name="stage_downloading">下载中</string>
+    <string name="stage_extracting">解压中</string>
+    <string name="stage_verifying">校验中</string>
+    <string name="stage_installing">安装中</string>
+    <string name="stage_loading">加载校验中</string>
+    <string name="stage_paused">已暂停</string>
+    <string name="stage_done">已完成</string>
+    <string name="model_details_tap_hint">点击查看完整失败详情</string>
+    <string name="model_delete_confirm">删除已安装的模型（占用 %1$s）？删除后需要重新下载。</string>
+    <string name="model_activated">已切换为：%1$s</string>
+    <string name="model_stage_running">正在%1$s…</string>
+    <string name="installed_size_short">已安装 %1$s</string>
+    <string name="downloaded_short">已下载 %1$s</string>
+    <string name="recordings_item_title">%1$s · %2$s</string>
+    <string name="recordings_delete_confirm">删除这条录音及其音频文件？</string>
+    <string name="model_downloading_meta">正在下载：%1$s（%2$d%%），完成后自动使用</string>
+    <string name="model_not_active">未启用</string>
 </resources>

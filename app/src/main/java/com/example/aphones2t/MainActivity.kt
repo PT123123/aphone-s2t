@@ -8,90 +8,68 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
-import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.provider.OpenableColumns
 import android.util.Log
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
-import android.widget.SeekBar
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import androidx.recyclerview.widget.DiffUtil
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.ListAdapter
-import androidx.recyclerview.widget.RecyclerView
 import com.example.aphones2t.data.AppDatabase
-import com.example.aphones2t.data.TranscriptEntity
 import com.example.aphones2t.data.TranscriptRepository
 import com.example.aphones2t.databinding.ActivityMainBinding
-import com.example.aphones2t.databinding.ItemMainRecordingBinding
+import com.example.aphones2t.dialog.AddCustomModelDialog
+import com.example.aphones2t.model.LocalModelInfo
 import com.example.aphones2t.model.ModelCatalog
+import com.example.aphones2t.model.ModelInstallStatus
 import com.example.aphones2t.model.ModelManager
+import com.example.aphones2t.model.ModelState
 import com.example.aphones2t.utils.AudioFileDecoder
 import com.example.aphones2t.utils.FileTranscriber
+import com.example.aphones2t.utils.FormatUtils
+import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.tabs.TabLayout
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class MainActivity : AppCompatActivity() {
+/**
+ * 主界面 —— 三个页面：实时转写 / 录音 / 模型。
+ *
+ * 之前「实时转写」和录音列表挤在同一个页面里，而且录音还分成本次录音与历史记录
+ * 两套（点「管理录音」看不到录音列表）。现在：
+ *  - 实时转写页只负责：当前模型卡片 + 转写文本 + 录音控制；
+ *  - 录音页是唯一的录音列表（实时录音 / 导入 / 离线转写都在这里）；
+ *  - 模型页是完整的模型管理（筛选 / 下载 / 详情 / 失败原因）。
+ */
+class MainActivity : AppCompatActivity(), AddCustomModelDialog.OnModelAddedListener {
 
     private lateinit var binding: ActivityMainBinding
     private var recording = false
     private var paused = false
     private var processing = false
+
     private val repo by lazy {
         TranscriptRepository(AppDatabase.get(this).transcriptDao())
     }
 
-    private val recordAdapter = MainRecordingsAdapter(
-        onPlay = { togglePlay(it) },
-        onSeek = { item, pos -> seekTo(item, pos) },
-        onTranscribe = { transcribe(it) },
-        onCopy = { copyText(it.text) }
-    )
-
-    /** 主窗口「非实时转写」Tab 的历史列表控制器。 */
-    private lateinit var historyController: HistoryListController
-
-    // ---- 录音播放 ----
-    private var player: MediaPlayer? = null
-    private var playingId = -1L
-    private val mainHandler = Handler(Looper.getMainLooper())
-    private val progressTick = object : Runnable {
-        override fun run() {
-            val p = player ?: return
-            val vh = recordAdapter.activeVh
-            if (vh != null) {
-                val pos = if (p.isPlaying) p.currentPosition else vh.lastPos
-                if (!vh.binding.sbProgress.isPressed) {
-                    vh.binding.sbProgress.progress = pos
-                    vh.binding.tvItemPos.text = formatMs(pos.toLong())
-                }
-                vh.lastPos = pos
-            }
-            // Keep ticking while a player is alive, even if the playing item is scrolled off.
-            mainHandler.postDelayed(this, 200L)
-        }
-    }
+    private lateinit var recordingsController: RecordingsController
+    private lateinit var modelListController: ModelListController
 
     private val importLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent()
@@ -109,22 +87,27 @@ class MainActivity : AppCompatActivity() {
             binding.tvTranscript.text = i.getStringExtra(TranscriptionService.EXTRA_TEXT) ?: ""
         }
     }
+
     private val finalReceiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
             val text = i.getStringExtra(TranscriptionService.EXTRA_TEXT) ?: ""
             val wav = i.getStringExtra(TranscriptionService.EXTRA_WAV)
             val dur = i.getLongExtra(TranscriptionService.EXTRA_DURATION, 0L)
+            val segments = i.getStringExtra(TranscriptionService.EXTRA_SEGMENTS)
             Log.d("MainActivity", "FINAL received text=$text wav=$wav dur=$dur")
             binding.tvTranscript.text = text
             updateUI()
-            // Recordings land in the main-window list (showInMain=true), not in history.
-            if (text.isNotBlank() || !wav.isNullOrBlank()) saveRecording(text, wav, dur)
+            if (text.isNotBlank() || !wav.isNullOrBlank()) saveRecording(text, wav, dur, segments)
         }
     }
+
     private val errorReceiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
-            Toast.makeText(c, i.getStringExtra(TranscriptionService.EXTRA_TEXT) ?: "错误",
-                Toast.LENGTH_LONG).show()
+            Toast.makeText(
+                c,
+                i.getStringExtra(TranscriptionService.EXTRA_TEXT) ?: "错误",
+                Toast.LENGTH_LONG
+            ).show()
             updateUI()
         }
     }
@@ -136,67 +119,31 @@ class MainActivity : AppCompatActivity() {
 
         binding.toolbar.setOnMenuItemClickListener {
             when (it.itemId) {
-                R.id.action_models -> { startActivity(Intent(this, ModelManagerActivity::class.java)); true }
-                R.id.action_import -> { if (!processing) importLauncher.launch("audio/*"); true }
-                R.id.action_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); true }
+                R.id.action_import -> {
+                    if (!processing) importLauncher.launch("audio/*"); true
+                }
+                R.id.action_settings -> {
+                    startActivity(Intent(this, SettingsActivity::class.java)); true
+                }
                 else -> false
             }
         }
 
-        binding.btnRecord.setOnClickListener {
-            if (recording) stopRecording() else checkPermissionsAndRecord()
-        }
-        binding.btnPause.setOnClickListener {
-            if (!recording) return@setOnClickListener
-            if (paused) {
-                startService(Intent(this, TranscriptionService::class.java)
-                    .setAction(TranscriptionService.ACTION_RESUME))
-                paused = false
-            } else {
-                startService(Intent(this, TranscriptionService::class.java)
-                    .setAction(TranscriptionService.ACTION_PAUSE))
-                paused = true
-            }
-            updateUI()
-        }
-
-        binding.rvRecordings.layoutManager = LinearLayoutManager(this)
-        binding.rvRecordings.adapter = recordAdapter
-
-        // 实时转写 / 非实时转写 两个 Tab 切换显示
-        binding.tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-            override fun onTabSelected(tab: TabLayout.Tab) {
-                val realtime = tab.position == 0
-                binding.llRealtime.visibility = if (realtime) View.VISIBLE else View.GONE
-                binding.llNonRealtime.visibility = if (realtime) View.GONE else View.VISIBLE
-            }
-
-            override fun onTabUnselected(tab: TabLayout.Tab) {}
-            override fun onTabReselected(tab: TabLayout.Tab) {}
-        })
-
-        // 非实时转写 Tab：复用历史记录列表逻辑（导入 / 离线转写）
-        historyController = HistoryListController(this, binding.rvHistory, binding.tvHistoryEmpty, repo)
-        historyController.start()
-
-        // 实时转写内容一键复制
-        binding.btnCopyTranscript.setOnClickListener {
-            copyText(binding.tvTranscript.text?.toString().orEmpty())
-        }
-
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                repo.main.collectLatest { list ->
-                    recordAdapter.submitList(list)
-                    binding.tvRecordingsLabel.visibility =
-                        if (list.isEmpty()) View.GONE else View.VISIBLE
-                    binding.tvRecordingsEmpty.visibility =
-                        if (list.isEmpty()) View.VISIBLE else View.GONE
-                }
-            }
-        }
+        setupTabs()
+        setupRealtimePage()
+        setupRecordingsPage()
+        setupModelsPage()
 
         updateUI()
+        if (savedInstanceState == null) {
+            switchToTab(intent.getIntExtra(EXTRA_TAB, TAB_REALTIME))
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        switchToTab(intent.getIntExtra(EXTRA_TAB, TAB_REALTIME))
     }
 
     override fun onStart() {
@@ -214,25 +161,210 @@ class MainActivity : AppCompatActivity() {
         try { unregisterReceiver(errorReceiver) } catch (_: Exception) {}
     }
 
-    override fun onResume() {
-        super.onResume()
-        refreshModelStatus()
-    }
-
     override fun onDestroy() {
         super.onDestroy()
-        stopPlayback()
+        recordingsController.pausePlayback()
     }
 
-    private fun refreshModelStatus() {
-        val ready = ModelManager.getActiveModelDirectory(this) != null
-        if (!ready) {
-            binding.tvTranscript.hint = getString(R.string.hint_no_model)
-        } else if (!recording) {
-            binding.tvTranscript.hint = getString(R.string.hint_ready)
-        }
-        updateUI()
+    // ================= 页面骨架 =================
+
+    private fun setupTabs() {
+        binding.tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab) {
+                binding.llRealtime.isVisible = tab.position == TAB_REALTIME
+                binding.llRecordings.isVisible = tab.position == TAB_RECORDINGS
+                binding.llModels.isVisible = tab.position == TAB_MODELS
+            }
+
+            override fun onTabUnselected(tab: TabLayout.Tab) {}
+            override fun onTabReselected(tab: TabLayout.Tab) {}
+        })
     }
+
+    private fun switchToTab(index: Int) {
+        val clamped = index.coerceIn(TAB_REALTIME, TAB_MODELS)
+        binding.tabLayout.getTabAt(clamped)?.select()
+    }
+
+    // ================= ① 实时转写 =================
+
+    private fun setupRealtimePage() {
+        binding.btnRecord.setOnClickListener {
+            if (recording) stopRecording() else checkPermissionsAndRecord()
+        }
+        binding.btnPause.setOnClickListener {
+            if (!recording) return@setOnClickListener
+            if (paused) {
+                startService(
+                    Intent(this, TranscriptionService::class.java)
+                        .setAction(TranscriptionService.ACTION_RESUME)
+                )
+                paused = false
+            } else {
+                startService(
+                    Intent(this, TranscriptionService::class.java)
+                        .setAction(TranscriptionService.ACTION_PAUSE)
+                )
+                paused = true
+            }
+            updateUI()
+        }
+        binding.btnCopyTranscript.setOnClickListener {
+            copyText(binding.tvTranscript.text?.toString().orEmpty())
+        }
+        binding.btnSwitchModel.setOnClickListener { showModelSwitcher() }
+        binding.btnManageModel.setOnClickListener { switchToTab(TAB_MODELS) }
+
+        // 模型状态变化 → 顶部卡片实时刷新（下载完成会自动变成当前模型）
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                ModelManager.observeStates(this@MainActivity).collectLatest { states ->
+                    renderCurrentModel(states)
+                }
+            }
+        }
+    }
+
+    /** 显示「当前用的是什么模型」——以前实时转写页完全没有这个信息。 */
+    private fun renderCurrentModel(states: List<ModelState>) {
+        val activeId = ModelManager.getActiveModelId(this)
+        val installed = states.filter { it.isInstalled }
+        // 直接从状态里挑，不要调 getActiveModel()：那条路会真的去加载 ONNX 模型，
+        // 而这里每次进度回调（约 500ms 一次）都会执行。
+        val model: LocalModelInfo? =
+            installed.firstOrNull { it.info.id == activeId }?.info ?: installed.firstOrNull()?.info
+
+        if (model == null) {
+            binding.tvCurrentModelName.text = getString(R.string.current_model_none)
+            val downloading = states.firstOrNull { it.status == ModelInstallStatus.DOWNLOADING }
+            binding.tvCurrentModelMeta.text = if (downloading != null) {
+                getString(
+                    R.string.model_downloading_meta,
+                    downloading.info.name,
+                    downloading.progressPercent.coerceAtLeast(0)
+                )
+            } else {
+                getString(R.string.current_model_none_hint)
+            }
+            binding.btnSwitchModel.isEnabled = false
+            binding.tvTranscript.hint = getString(R.string.hint_no_model)
+            return
+        }
+
+        binding.tvCurrentModelName.text = model.name
+        binding.tvCurrentModelMeta.text = buildString {
+            append(ModelListController.languageLabel(model.language))
+            if (model.downloadSizeBytes > 0) {
+                append(" · ").append(FormatUtils.size(this@MainActivity, model.downloadSizeBytes))
+            }
+            append(" · ").append(getString(R.string.model_status_installed))
+            if (model.id != activeId) {
+                append("（").append(getString(R.string.model_not_active)).append("）")
+            }
+        }
+        binding.btnSwitchModel.isEnabled = installed.isNotEmpty()
+        if (!recording) binding.tvTranscript.hint = getString(R.string.hint_ready)
+    }
+
+    private fun showModelSwitcher() {
+        val installed = ModelManager.installedModels(this)
+        if (installed.isEmpty()) {
+            Toast.makeText(this, R.string.model_switch_no_installed, Toast.LENGTH_SHORT).show()
+            switchToTab(TAB_MODELS)
+            return
+        }
+        val activeId = ModelManager.getActiveModelId(this)
+        val sheet = BottomSheetDialog(this)
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(20), dp(20), dp(28))
+        }
+        content.addView(TextView(this).apply {
+            text = getString(R.string.model_switch_title)
+            textSize = 17f
+            setTextColor(getColor(R.color.text_primary))
+            setPadding(0, 0, 0, dp(4))
+        })
+        installed.forEach { info ->
+            val isActive = info.id == activeId
+            content.addView(TextView(this).apply {
+                text = buildString {
+                    if (isActive) append("✓ ")
+                    append(info.name)
+                    append('\n')
+                    append(ModelListController.languageLabel(info.language))
+                    append(" · ").append(FormatUtils.size(this@MainActivity, info.downloadSizeBytes))
+                }
+                textSize = 15f
+                setPadding(0, dp(12), 0, dp(12))
+                setTextColor(getColor(if (isActive) R.color.seed else R.color.text_primary))
+                setBackgroundResource(android.R.drawable.list_selector_background)
+                setOnClickListener {
+                    ModelManager.setActiveModel(this@MainActivity, info.id)
+                    Toast.makeText(
+                        this@MainActivity,
+                        getString(R.string.model_activated, info.name),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    sheet.dismiss()
+                }
+            })
+        }
+        content.addView(TextView(this).apply {
+            text = getString(
+                if (recording) R.string.model_switch_recording_hint else R.string.model_switch_hint
+            )
+            textSize = 12f
+            setPadding(0, dp(10), 0, 0)
+            setTextColor(getColor(R.color.text_secondary))
+        })
+        sheet.setContentView(ScrollView(this).apply { addView(content) })
+        sheet.show()
+    }
+
+    // ================= ② 录音 =================
+
+    private fun setupRecordingsPage() {
+        recordingsController = RecordingsController(
+            activity = this,
+            recycler = binding.rvRecordings,
+            emptyView = binding.tvRecordingsEmpty,
+            repo = repo,
+            onCountChanged = { count ->
+                binding.tvRecordingsCount.text = getString(R.string.recordings_count, count)
+            }
+        )
+        recordingsController.start()
+        binding.btnImportAudio.setOnClickListener {
+            if (!processing) importLauncher.launch("audio/*")
+        }
+    }
+
+    // ================= ③ 模型 =================
+
+    private fun setupModelsPage() {
+        modelListController = ModelListController(
+            activity = this,
+            container = binding.llModelContainer,
+            emptyView = binding.tvModelEmpty,
+            chipGroup = binding.chipGroupStatus,
+            spLanguage = binding.spLanguage,
+            spSort = binding.spSort
+        )
+        modelListController.start()
+        binding.btnAddModel.setOnClickListener {
+            AddCustomModelDialog().show(supportFragmentManager, "AddCustomModelDialog")
+        }
+        binding.btnPasteModels.setOnClickListener {
+            startActivity(Intent(this, CustomModelActivity::class.java))
+        }
+    }
+
+    override fun onModelAdded() {
+        // 状态通过 ModelManager 的流自动刷新
+    }
+
+    // ================= 录音控制 =================
 
     private fun checkPermissionsAndRecord() {
         val needed = listOf(
@@ -243,15 +375,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startRecording() {
-        startForegroundService(Intent(this, TranscriptionService::class.java)
-            .setAction(TranscriptionService.ACTION_START))
+        startForegroundService(
+            Intent(this, TranscriptionService::class.java).setAction(TranscriptionService.ACTION_START)
+        )
         recording = true; paused = false
         updateUI()
     }
 
     private fun stopRecording() {
-        startService(Intent(this, TranscriptionService::class.java)
-            .setAction(TranscriptionService.ACTION_STOP))
+        startService(
+            Intent(this, TranscriptionService::class.java).setAction(TranscriptionService.ACTION_STOP)
+        )
         recording = false; paused = false
         updateUI()
     }
@@ -261,18 +395,21 @@ class MainActivity : AppCompatActivity() {
         if (recording) {
             binding.btnRecord.text = getString(R.string.stop_recording)
             binding.btnRecord.setBackgroundColor(getColor(R.color.rec))
-            binding.btnPause.visibility = android.view.View.VISIBLE
-            binding.btnPause.text = if (paused) getString(R.string.resume_recording) else getString(R.string.pause_recording)
-            binding.tvStatus.text = if (paused) getString(R.string.paused_status) else getString(R.string.recording_status)
+            binding.btnPause.isVisible = true
+            binding.btnPause.text = getString(
+                if (paused) R.string.resume_recording else R.string.pause_recording
+            )
+            binding.tvStatus.text = getString(
+                if (paused) R.string.paused_status else R.string.recording_status
+            )
         } else {
             binding.btnRecord.text = getString(R.string.start_recording)
             binding.btnRecord.setBackgroundColor(getColor(R.color.seed))
-            binding.btnPause.visibility = android.view.View.GONE
+            binding.btnPause.isVisible = false
             binding.tvStatus.text = getString(R.string.idle_status)
         }
     }
 
-    /** Copies the given text to the system clipboard, with empty guard. */
     private fun copyText(text: String) {
         if (text.isBlank()) {
             Toast.makeText(this, R.string.nothing_to_copy, Toast.LENGTH_SHORT).show()
@@ -283,14 +420,14 @@ class MainActivity : AppCompatActivity() {
         Toast.makeText(this, R.string.copied, Toast.LENGTH_SHORT).show()
     }
 
-    /** A finished recording goes to the main-window list, not to history. */
-    private fun saveRecording(text: String, wav: String?, durationMs: Long) {
+    /** 一条实时录音落库（带分段时间轴），统一出现在录音页。 */
+    private fun saveRecording(text: String, wav: String?, durationMs: Long, segmentsJson: String?) {
         val id = ModelManager.getActiveModelId(this)
         val modelName = id?.let { ModelCatalog.findById(this, it)?.name }
             ?: getString(R.string.pending_transcribe)
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val rowId = repo.insert(text, wav, durationMs, modelName, showInMain = true)
+                val rowId = repo.insert(text, wav, durationMs, modelName, segmentsJson)
                 Log.d("MainActivity", "inserted rowId=$rowId text='$text'")
             } catch (e: Exception) {
                 Log.e("MainActivity", "insert failed", e)
@@ -298,85 +435,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ================= 播放 / 进度条 =================
+    // ================= 导入音频 =================
 
-    private fun togglePlay(item: TranscriptEntity) {
-        val path = item.wavPath
-        if (path.isNullOrBlank()) {
-            Toast.makeText(this, "无音频文件", Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (playingId == item.id) {
-            val p = player
-            if (p?.isPlaying == true) {
-                p.pause()
-            } else {
-                p?.start()
-                mainHandler.postDelayed(progressTick, 0L)
-            }
-            return
-        }
-        stopPlayback()
-        try {
-            val mp = MediaPlayer()
-            mp.setDataSource(path)
-            mp.setOnPreparedListener { prepared ->
-                prepared.start()
-                playingId = item.id
-                recordAdapter.playingId = item.id
-                mainHandler.postDelayed(progressTick, 0L)
-            }
-            mp.setOnCompletionListener { stopPlayback() }
-            mp.setOnErrorListener { _, _, _ -> stopPlayback(); true }
-            mp.prepareAsync()
-            player = mp
-        } catch (e: Exception) {
-            Toast.makeText(this, "播放失败", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun stopPlayback() {
-        mainHandler.removeCallbacks(progressTick)
-        try { player?.stop() } catch (_: Exception) {}
-        try { player?.release() } catch (_: Exception) {}
-        player = null
-        if (playingId != -1L) {
-            playingId = -1L
-            recordAdapter.playingId = -1L
-        }
-    }
-
-    private fun seekTo(item: TranscriptEntity, progressMs: Int) {
-        if (playingId == item.id) {
-            try { player?.seekTo(progressMs) } catch (_: Exception) {}
-        }
-    }
-
-    /** Re-transcribes a pending main-window recording once a model is available. */
-    private fun transcribe(item: TranscriptEntity) {
-        val path = item.wavPath ?: run {
-            Toast.makeText(this, "无音频文件", Toast.LENGTH_SHORT).show(); return
-        }
-        val modelDir = ModelManager.getActiveModelDirectory(this) ?: run {
-            Toast.makeText(this, getString(R.string.transcribe_no_model), Toast.LENGTH_SHORT).show(); return
-        }
-        Toast.makeText(this, getString(R.string.transcribing_status), Toast.LENGTH_SHORT).show()
-        lifecycleScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                FileTranscriber.transcribe(this@MainActivity, modelDir, path)
-            }
-            if (result == null) {
-                Toast.makeText(this@MainActivity, getString(R.string.transcribe_failed), Toast.LENGTH_SHORT).show()
-                return@launch
-            }
-            val modelName = ModelManager.getActiveModelId(this@MainActivity)
-                ?.let { ModelCatalog.findById(this@MainActivity, it)?.name } ?: "sherpa-onnx"
-            repo.update(item.copy(text = result.text, durationMs = result.durationMs, modelName = modelName))
-            Toast.makeText(this@MainActivity, getString(R.string.transcribe_success), Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    /** Copies a picked audio file into app storage and transcribes it if a model is ready. */
     private fun importAudio(uri: Uri) {
         if (processing) return
         processing = true
@@ -396,22 +456,23 @@ class MainActivity : AppCompatActivity() {
                 var text = ""
                 var durationMs = 0L
                 var modelName = getString(R.string.pending_transcribe)
+                var segmentsJson: String? = null
                 if (modelDir != null) {
                     val r = FileTranscriber.transcribe(this@MainActivity, modelDir, dest.absolutePath)
                     if (r != null) {
                         text = r.text
                         durationMs = r.durationMs
+                        segmentsJson = r.segmentsJson
                         modelName = ModelManager.getActiveModelId(this@MainActivity)
                             ?.let { ModelCatalog.findById(this@MainActivity, it)?.name } ?: "sherpa-onnx"
                     }
                 } else {
-                    // No model: still record duration so the pending entry is informative.
+                    // 没有模型：仍然记录时长，方便之后一键转写
                     durationMs = AudioFileDecoder
                         .decodeToPcm16kMono(this@MainActivity, dest.absolutePath)
                         ?.size?.div(16)?.toLong() ?: 0L
                 }
-                // Imports stay in history (showInMain = false).
-                repo.insert(text, dest.absolutePath, durationMs, modelName)
+                repo.insert(text, dest.absolutePath, durationMs, modelName, segmentsJson)
                 runOnUiThread {
                     Toast.makeText(
                         this@MainActivity,
@@ -421,6 +482,7 @@ class MainActivity : AppCompatActivity() {
                     ).show()
                     processing = false
                     updateUI()
+                    switchToTab(TAB_RECORDINGS)
                 }
             } catch (e: Exception) {
                 runOnUiThread {
@@ -445,105 +507,13 @@ class MainActivity : AppCompatActivity() {
         null
     }
 
-    // ================= 录音列表适配器 =================
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
-    private class MainRecordingsAdapter(
-        private val onPlay: (TranscriptEntity) -> Unit,
-        private val onSeek: (TranscriptEntity, Int) -> Unit,
-        private val onTranscribe: (TranscriptEntity) -> Unit,
-        private val onCopy: (TranscriptEntity) -> Unit
-    ) : ListAdapter<TranscriptEntity, MainRecordingsAdapter.VH>(DIFF) {
-
-        /** Currently playing item id; -1 when nothing plays. */
-        var playingId: Long = -1L
-            set(value) {
-                if (field == value) return
-                field = value
-                if (value == -1L) activeVh = null
-                notifyDataSetChanged()
-            }
-
-        /** ViewHolder of the item currently being played (updated by MainActivity tick). */
-        var activeVh: VH? = null
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
-            val b = ItemMainRecordingBinding.inflate(LayoutInflater.from(parent.context), parent, false)
-            return VH(b)
-        }
-
-        override fun onBindViewHolder(holder: VH, position: Int) {
-            val item = getItem(position)
-            holder.item = item
-            val time = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(item.createdAt))
-            holder.binding.tvItemTitle.text = "$time · ${item.modelName}"
-            holder.binding.tvItemTotal.text = formatMs(item.durationMs)
-            holder.binding.tvItemPos.text = formatMs(0L)
-            holder.binding.tvItemText.text = when {
-                item.text.isNotBlank() -> item.text
-                !item.wavPath.isNullOrBlank() ->
-                    holder.binding.root.context.getString(R.string.pending_transcribe)
-                else -> "[空]"
-            }
-            holder.binding.sbProgress.max = item.durationMs.coerceAtLeast(1).toInt()
-            holder.binding.sbProgress.progress = 0
-            holder.lastPos = 0
-
-            val isPlaying = item.id == playingId
-            holder.binding.btnPlay.text = holder.binding.root.context.getString(
-                if (isPlaying) R.string.stop_playback else R.string.play
-            )
-            // Keep activeVh pointing only at the currently-playing holder; clear it when a
-            // non-playing item binds into a recycled holder so progress never leaks elsewhere.
-            if (isPlaying) activeVh = holder else if (activeVh === holder) activeVh = null
-
-            // Pending (no text but has audio) entries get a one-tap transcribe when a model is ready.
-            val pending = item.text.isBlank() && !item.wavPath.isNullOrBlank()
-            holder.binding.btnTranscribe.visibility =
-                if (pending && ModelManager.getActiveModelDirectory(holder.binding.root.context) != null)
-                    View.VISIBLE else View.GONE
-
-            holder.binding.btnPlay.setOnClickListener { onPlay(item) }
-            holder.binding.btnTranscribe.setOnClickListener { onTranscribe(item) }
-            holder.binding.btnCopy.setOnClickListener { onCopy(item) }
-            holder.binding.sbProgress.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                    if (fromUser) {
-                        holder.lastPos = progress
-                        holder.binding.tvItemPos.text = formatMs(progress.toLong())
-                    }
-                }
-
-                override fun onStartTrackingTouch(sb: SeekBar?) {}
-
-                override fun onStopTrackingTouch(sb: SeekBar?) {
-                    val pos = sb?.progress ?: 0
-                    holder.lastPos = pos
-                    holder.binding.tvItemPos.text = formatMs(pos.toLong())
-                    onSeek(item, pos)
-                }
-            })
-        }
-
-        class VH(val binding: ItemMainRecordingBinding) : RecyclerView.ViewHolder(binding.root) {
-            var item: TranscriptEntity? = null
-            var lastPos: Int = 0
-        }
-
-        companion object {
-            val DIFF = object : DiffUtil.ItemCallback<TranscriptEntity>() {
-                override fun areItemsTheSame(a: TranscriptEntity, b: TranscriptEntity) = a.id == b.id
-                override fun areContentsTheSame(a: TranscriptEntity, b: TranscriptEntity) = a == b
-            }
-        }
+    companion object {
+        /** 打开主界面时定位到哪个页面（设置页的「管理模型 / 管理录音」会用）。 */
+        const val EXTRA_TAB = "extra_tab"
+        const val TAB_REALTIME = 0
+        const val TAB_RECORDINGS = 1
+        const val TAB_MODELS = 2
     }
-}
-
-/** mm:ss（或 h:mm:ss）时长格式化。 */
-private fun formatMs(ms: Long): String {
-    val totalSec = (ms / 1000).coerceAtLeast(0)
-    val h = totalSec / 3600
-    val m = (totalSec % 3600) / 60
-    val s = totalSec % 60
-    return if (h > 0) String.format(Locale.getDefault(), "%d:%02d:%02d", h, m, s)
-    else String.format(Locale.getDefault(), "%02d:%02d", m, s)
 }
