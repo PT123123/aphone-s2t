@@ -153,6 +153,11 @@ Signed release APK for Obtainium distribution.
 - Install via Obtainium: add app → GitHub → $repo → track "latest release"
 - Asset: $fixed (permanent link: https://github.com/$repo/releases/latest/download/$fixed)
 EOF
+    # hand-written changelog wins over the boilerplate: dist/changelog-<app>.md
+    if [ -f "$DIST/changelog-$p.md" ]; then
+      printf '\n' >> "$notes"
+      cat "$DIST/changelog-$p.md" >> "$notes"
+    fi
 
     echo ">> publishing $repo v$vn (tag at $sha)"
     gh release create "v$vn" "$(to_native "$apk")" "$(to_native "$arch")" \
