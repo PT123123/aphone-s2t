@@ -23,6 +23,10 @@ mkdir -p "$DIST"
 
 to_native() { cygpath -w "$1" 2>/dev/null || echo "$1"; }
 
+# git -C <abs/cygwin/path> is broken in this Git-Bash (fails with "cannot change to");
+# cd into the repo first and run git there instead.
+gin() { local d=$1; shift; ( cd "$d" && git "$@" ); }
+
 # build-tools: prefer the bash apksigner script (avoids the .bat stdout-hang on Windows)
 BT=$(ls -d "$ANDROID_HOME"/build-tools/*/ 2>/dev/null | sort -V | tail -1)
 APKSIGNER="$BT/apksigner"; [ -f "$APKSIGNER" ] || APKSIGNER="$BT/apksigner.bat"
