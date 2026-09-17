@@ -6,10 +6,16 @@
 #   PT123123/a-readtext  -> areadtext-release.apk
 #
 # Usage:
-#   bash tools/release.sh package     # build both release APKs -> dist/ + self-check
-#   bash tools/release.sh verify      # only self-check dist/ APKs (reject debug cert)
-#   bash tools/release.sh bump        # versionCode+1 / versionName last segment+1 (both)
-#   bash tools/release.sh publish     # gate checks -> gh release create -> download verify
+#   bash tools/release.sh package            # build both release APKs -> dist/ + self-check
+#   bash tools/release.sh verify             # only self-check dist/ APKs (reject debug cert)
+#   bash tools/release.sh bump               # versionCode+1 / versionName last segment+1 (both)
+#   bash tools/release.sh publish            # gate checks -> gh release create -> download verify
+#
+# Optional 2nd arg scopes the command to ONE app (default: both):
+#   bash tools/release.sh bump aphone
+#   bash tools/release.sh publish aphone
+# Use it when only one app's source changed — bumping/publishing the other would
+# push a no-op release that Obtainium users would still be notified about.
 #
 # Both apps sign with the SAME local keystore (release.p12 + keystore.properties at each
 # project root). Those files are gitignored; the real keystore is backed up outside the repos.
@@ -31,6 +37,9 @@ gin() { local d=$1; shift; ( cd "$d" && git "$@" ); }
 BT=$(ls -d "$ANDROID_HOME"/build-tools/*/ 2>/dev/null | sort -V | tail -1)
 APKSIGNER="$BT/apksigner"; [ -f "$APKSIGNER" ] || APKSIGNER="$BT/apksigner.bat"
 AAPT2=$(to_native "$BT/aapt2.exe")
+
+# Which apps a command applies to: "all" (default) | aphone | aread
+select_projs() { case "${1:-all}" in aphone|aread) echo "$1" ;; *) echo "aphone aread" ;; esac; }
 
 proj_root()  { [ "$1" = aphone ] && echo "$APHONE" || echo "$AREAD"; }
 proj_fixed() { [ "$1" = aphone ] && echo "aphones2t-release.apk" || echo "areadtext-release.apk"; }
@@ -87,12 +96,20 @@ verify_one() {
   [ "$appid" = "$(echo "$pkg" | awk '{print $1}')" ] || { echo "APPID MISMATCH: expected $appid got $pkg"; return 1; }
 }
 
-cmd_package() { for p in aphone aread; do package_one "$p"; done; cmd_verify; }
-cmd_verify()  { local rc=0; for p in aphone aread; do verify_one "$p" || rc=1; done; return $rc; }
+cmd_package() {
+  local p
+  for p in $(select_projs "${1:-all}"); do package_one "$p"; done
+  cmd_verify "${1:-all}"
+}
+cmd_verify()  {
+  local rc=0 p
+  for p in $(select_projs "${1:-all}"); do verify_one "$p" || rc=1; done
+  return $rc
+}
 
 cmd_bump() {
-  for p in aphone aread; do
-    local root=$1 vc vn maj min pat nc nvn
+  local p root vc vn maj min pat nc nvn
+  for p in $(select_projs "${1:-all}"); do
     root=$(proj_root "$p"); read vc vn < <(get_ver "$root")
     nc=$((vc+1)); IFS='.' read maj min pat <<< "$vn"; nvn="$maj.$min.$((pat+1))"
     sed -i -E "s/(versionCode[[:space:]]+)[0-9]+/\1$nc/" "$root/app/build.gradle"
@@ -102,7 +119,8 @@ cmd_bump() {
 }
 
 cmd_publish() {
-  for p in aphone aread; do
+  local p
+  for p in $(select_projs "${1:-all}"); do
     local root fixed repo arch apk vc vn sha branch rsha dirty fp_now fp_built notes url dl
     root=$(proj_root "$p"); fixed=$(proj_fixed "$p"); repo=$(proj_repo "$p")
     apk="$DIST/$fixed"
@@ -152,9 +170,9 @@ EOF
 }
 
 case "${1:-package}" in
-  package) cmd_package ;;
-  verify)  cmd_verify ;;
-  bump)    cmd_bump ;;
-  publish) cmd_publish ;;
-  *) echo "usage: $0 [package|verify|bump|publish]"; exit 2 ;;
+  package) cmd_package "${2:-all}" ;;
+  verify)  cmd_verify  "${2:-all}" ;;
+  bump)    cmd_bump    "${2:-all}" ;;
+  publish) cmd_publish "${2:-all}" ;;
+  *) echo "usage: $0 [package|verify|bump|publish] [aphone|aread]"; exit 2 ;;
 esac
