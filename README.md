@@ -218,13 +218,33 @@ Apache-2.0 License
 - MeetingTranscriptionApp: https://github.com/yumu908/MeetingTranscriptionApp
 - VoiceNotes: https://github.com/Akbar02Work/VoiceNotes
 
+## 发布（正式签名包 → GitHub Release）
+
+```bash
+just release              # 构建 release APK 到 dist/ 并自检（拒收 debug 证书）
+just release bump aphone  # versionCode+1 / versionName 末段+1（只做 aphone；不传则 aphone+aread 都做）
+just release publish aphone   # 四道闸校验 → 打 tag → gh release create → 真下载比 sha256
+just release verify aphone    # 只自检 dist/ 里现成的包
+```
+
+固定资产名 `aphones2t-release.apk`，永久直链：
+
+```
+https://github.com/PT123123/aphone-s2t/releases/latest/download/aphones2t-release.apk
+```
+
+Obtainium 添加应用 → GitHub → `PT123123/aphone-s2t` → 跟踪 "latest release" 即可在线升级。
+
+发布说明由 `tools/release.sh` 生成；若存在 `dist/changelog-<app>.md`（`aphone` / `aread`），
+其内容会追加到 Release Notes 里。
+
 ## 更新日志
 
 ### v1.0.0 (2024-09-01)
 - 初始版本
 - 实时语音转写、模型管理、历史记录、自定义模型支持
 
-### 未发布（界面改版）
+### v1.0.1 (2026-09-18) — 界面改版
 - 主界面重排为「实时转写 / 录音 / 模型」三页，录音列表从实时转写页移出
 - 录音列表统一（原来「本次录音」与「历史记录」是两套，管理录音里看不到内容）
 - 模型管理新增状态筛选（未下载 / 下载中 / 已下载）与数量角标
@@ -234,3 +254,4 @@ Apache-2.0 License
 - 实时转写页显示当前模型并可一键切换
 - 新增分段时间轴：点文本任意一句跳到录音对应时间；老录音可「生成时间轴」
 - 数据库 v3：新增 segments 列（Room 迁移 2→3）
+
