@@ -100,9 +100,10 @@ help:
 #   just release verify     # 只自检 dist/ 现有包（拒收 debug 证书）
 #   just release bump       # versionCode / versionName 末段 +1
 #   just release publish    # 四道闸校验后发到各自仓库的 release，并真下载校验
+#   just release bump aphone   # 只对某一个 app 操作（aphone|aread），不传则两个都做
 [script]
-release action="package":
-    bash tools/release.sh {{action}}
+release action="package" *args:
+    bash tools/release.sh {{action}} {{args}}
 
 # 默认命令
 default:
