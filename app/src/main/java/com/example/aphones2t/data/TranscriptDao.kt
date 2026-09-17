@@ -15,11 +15,9 @@ interface TranscriptDao {
     @Update
     suspend fun update(t: TranscriptEntity)
 
-    @Query("SELECT * FROM transcripts WHERE show_in_main = 0 ORDER BY created_at DESC")
-    fun observeHistory(): Flow<List<TranscriptEntity>>
-
-    @Query("SELECT * FROM transcripts WHERE show_in_main = 1 ORDER BY created_at DESC")
-    fun observeMain(): Flow<List<TranscriptEntity>>
+    /** 所有录音（实时录音 + 导入 + 离线转写）统一按时间倒序，全应用只有一个列表。 */
+    @Query("SELECT * FROM transcripts ORDER BY created_at DESC")
+    fun observeAll(): Flow<List<TranscriptEntity>>
 
     @Query("SELECT * FROM transcripts ORDER BY created_at DESC")
     suspend fun getAll(): List<TranscriptEntity>

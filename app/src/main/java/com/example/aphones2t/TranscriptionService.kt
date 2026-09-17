@@ -15,6 +15,8 @@ import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.aphones2t.asr.SherpaStreamingAsr
+import com.example.aphones2t.data.TranscriptSegment
+import com.example.aphones2t.data.TranscriptSegments
 import com.example.aphones2t.model.ModelManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,7 +33,8 @@ import java.util.Locale
 /**
  * Foreground service that captures microphone audio and runs the streaming
  * sherpa-onnx Paraformer recognizer in real time. Partial results are broadcast
- * continuously; the final transcript (+ WAV) is broadcast when recording stops.
+ * continuously; the final transcript (+ WAV + 分段时间轴) is broadcast when
+ * recording stops.
  */
 class TranscriptionService : Service() {
 
@@ -47,6 +50,9 @@ class TranscriptionService : Service() {
         const val EXTRA_TEXT = "text"
         const val EXTRA_WAV = "wav"
         const val EXTRA_DURATION = "duration"
+
+        /** 分段时间轴 JSON（[{s,e,t}]），用于「点文字跳到对应录音位置」。 */
+        const val EXTRA_SEGMENTS = "segments"
 
         private const val NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "transcription_channel"
@@ -239,18 +245,29 @@ class TranscriptionService : Service() {
         scope.launch {
             delay(300) // let the recognizer consume the tail
             val finalText = asr?.finalText() ?: ""
+            val rawSegments = asr?.segments().orEmpty()
             cleanupAudio()
             val durationMs = System.currentTimeMillis() - startedAt
             val pcmBytes = pcm.toByteArray()
             if (pcmBytes.size > SAMPLE_RATE * 2) { // at least 1s of audio
+                val segmentsJson = TranscriptSegments.encode(
+                    rawSegments.map {
+                        TranscriptSegment(
+                            startMs = it.startMs,
+                            endMs = it.endMs.coerceAtMost(durationMs),
+                            text = it.text
+                        )
+                    }
+                )
                 saveWav(pcmBytes)
-                saveTranscript(finalText, durationMs)
+                saveTranscript(finalText, durationMs, segmentsJson)
                 Log.d(TAG, "broadcasting FINAL wav=${outputWav?.absolutePath} text='$finalText'")
                 val i = Intent(ACTION_FINAL)
                     .setPackage(packageName)
                     .putExtra(EXTRA_TEXT, finalText)
                     .putExtra(EXTRA_WAV, outputWav?.absolutePath ?: "")
                     .putExtra(EXTRA_DURATION, durationMs)
+                    .putExtra(EXTRA_SEGMENTS, segmentsJson ?: "")
                 sendBroadcast(i)
             } else {
                 outputWav?.delete(); outputTxt?.delete()
@@ -308,7 +325,7 @@ class TranscriptionService : Service() {
         } catch (_: Exception) {}
     }
 
-    private fun saveTranscript(text: String, durationMs: Long) {
+    private fun saveTranscript(text: String, durationMs: Long, segmentsJson: String?) {
         val f = outputTxt ?: return
         val body = when {
             text.isNotBlank() -> text
@@ -316,12 +333,29 @@ class TranscriptionService : Service() {
             else -> "[未检测到语音]"
         }
         val duration = SimpleDateFormat("mm:ss", Locale.getDefault()).format(Date(durationMs))
+        val timeline = TranscriptSegments.decode(segmentsJson).joinToString("\n") { seg ->
+            "[${formatClock(seg.startMs)}] ${seg.text}"
+        }
         try {
             f.writeText(
-                "实时转写 ${outputWav?.nameWithoutExtension}\n" +
-                    "时长: $duration\n引擎: sherpa-onnx 流式 Paraformer\n---\n\n$body"
+                buildString {
+                    append("实时转写 ${outputWav?.nameWithoutExtension}\n")
+                    append("时长: $duration\n")
+                    append("引擎: sherpa-onnx 流式模型\n")
+                    append("---\n\n")
+                    if (timeline.isNotBlank()) {
+                        append(timeline)
+                    } else {
+                        append(body)
+                    }
+                }
             )
         } catch (_: Exception) {}
+    }
+
+    private fun formatClock(ms: Long): String {
+        val totalSec = (ms / 1000).coerceAtLeast(0)
+        return String.format(Locale.getDefault(), "%02d:%02d", totalSec / 60, totalSec % 60)
     }
 
     override fun onDestroy() {
