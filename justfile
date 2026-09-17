@@ -95,6 +95,15 @@ help:
     @echo "  just install-phone  # 安装到手机"
     @echo "  just install-tab    # 安装到平板"
 
+# 发布流水线：出正式签名包 + 自检 + 打 tag + 发独立 GitHub release（两个 app 各一个）
+#   just release            # 等价于 package：构建两个 release APK 并自检
+#   just release verify     # 只自检 dist/ 现有包（拒收 debug 证书）
+#   just release bump       # versionCode / versionName 末段 +1
+#   just release publish    # 四道闸校验后发到各自仓库的 release，并真下载校验
+[script]
+release action="package":
+    bash tools/release.sh {{action}}
+
 # 默认命令
 default:
     @just --list
