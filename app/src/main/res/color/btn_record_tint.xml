@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 录音主按钮的状态色：待机=primary，录音中=error（第11章 ColorStateList） -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="false" android:color="?attr/colorSurfaceContainerHighest" />
+    <item android:state_checked="true" android:color="?attr/colorError" />
+    <item android:color="?attr/colorPrimary" />
+</selector>

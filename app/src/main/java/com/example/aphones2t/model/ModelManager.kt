@@ -154,7 +154,7 @@ object ModelManager {
 
     // ---- work control ----
 
-    fun download(context: Context, info: LocalModelInfo) {
+    fun download(context: Context, info: LocalModelInfo, sourceIndex: Int? = null) {
         val app = context.applicationContext
         DownloadDiagnostics.clearError(app, info.id)
         DownloadDiagnostics.log(app, info.id, "开始下载 ${info.archive.name}")
@@ -162,7 +162,13 @@ object ModelManager {
         cancelling.value = cancelling.value - info.id
         io.execute {
             val req = OneTimeWorkRequestBuilder<ModelDownloadWorker>()
-                .setInputData(workDataOf(ModelDownloadWorker.KEY_MODEL_ID to info.id))
+                .setInputData(
+                    workDataOf(
+                        ModelDownloadWorker.KEY_MODEL_ID to info.id,
+                        ModelDownloadWorker.KEY_SOURCE_INDEX to
+                            (sourceIndex ?: MirrorResolver.preferredIndex(app, info.id))
+                    )
+                )
                 .setConstraints(
                     Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
                 )
@@ -174,6 +180,21 @@ object ModelManager {
             )
             refresh.value++
         }
+    }
+
+    /**
+     * 「换镜像重试」：把源指针往后挪一格再重新下载。
+     *
+     * 主源 403 / 超时是最常见的失败之一，之前「重试」打的还是同一个地址，等于没救。
+     */
+    fun retryWithNextMirror(context: Context, info: LocalModelInfo) {
+        val app = context.applicationContext
+        val next = MirrorResolver.nextIndex(app, info)
+        DownloadDiagnostics.log(
+            app, info.id,
+            "用户选择换镜像重试（源 ${next + 1}/${MirrorResolver.sourceCount(info)}）"
+        )
+        download(app, info, next)
     }
 
     fun pause(context: Context, info: LocalModelInfo) {
@@ -356,7 +377,7 @@ object ModelManager {
             totalBytes = total,
             bytesPerSec = if (work?.state == WorkInfo.State.RUNNING) speed else 0L,
             etaSec = if (work?.state == WorkInfo.State.RUNNING) eta else 0L,
-            error = errorDetail?.summary(),
+            error = errorDetail?.summary(context),
             errorDetail = errorDetail,
             isActive = isActive
         )

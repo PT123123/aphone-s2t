@@ -2,6 +2,7 @@ package com.example.aphones2t.utils
 
 import android.content.Context
 import android.text.format.Formatter
+import com.example.aphones2t.R
 import java.util.Locale
 
 /** 体积 / 速度 / 时长 的统一格式化，供模型卡片与录音列表共用。 */
@@ -26,18 +27,20 @@ object FormatUtils {
     }
 
     /** 剩余时间：12秒 / 1分20秒 / 1小时3分。 */
-    fun eta(seconds: Long): String = when {
+    fun eta(context: Context, seconds: Long): String = when {
         seconds <= 0L -> "—"
-        seconds < 60L -> "${seconds}秒"
+        seconds < 60L -> context.getString(R.string.eta_seconds, seconds)
         seconds < 3600L -> {
             val m = seconds / 60
             val s = seconds % 60
-            if (s == 0L) "${m}分" else "${m}分${s}秒"
+            if (s == 0L) context.getString(R.string.eta_minutes, m)
+            else context.getString(R.string.eta_minutes_seconds, m, s)
         }
         else -> {
             val h = seconds / 3600
             val m = (seconds % 3600) / 60
-            if (m == 0L) "${h}小时" else "${h}小时${m}分"
+            if (m == 0L) context.getString(R.string.eta_hours, h)
+            else context.getString(R.string.eta_hours_minutes, h, m)
         }
     }
 }

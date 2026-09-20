@@ -33,6 +33,7 @@ import com.example.aphones2t.data.TranscriptSegments
 import com.example.aphones2t.databinding.ItemRecordingBinding
 import com.example.aphones2t.model.ModelCatalog
 import com.example.aphones2t.model.ModelManager
+import com.example.aphones2t.utils.ErrorCodes
 import com.example.aphones2t.utils.FileTranscriber
 import com.example.aphones2t.utils.FormatUtils
 import kotlinx.coroutines.Dispatchers
@@ -61,11 +62,14 @@ class RecordingsController(
 ) {
 
     private val adapter = RecordingsAdapter(
-        onPlay = { togglePlay(it, 0) },
+        onPlay = { item, playing -> if (playing) stopPlayback() else togglePlay(item, 0) },
         onSeek = { item, pos -> seekTo(item, pos) },
         onSegment = { item, startMs -> togglePlay(item, startMs) },
         onMore = { showActions(it) }
     )
+
+    /** 点「转写」CTA 时弹「无模型」对话框（由 MainActivity 注册，避免循环依赖）。 */
+    var pendingCta: ((Long) -> Unit)? = null
 
     private var player: MediaPlayer? = null
     private var playingId = -1L
@@ -181,11 +185,6 @@ class RecordingsController(
             !item.wavPath.isNullOrBlank() && modelDir != null
 
         val actions = mutableListOf<Pair<String, () -> Unit>>()
-        actions += activity.getString(
-            if (playingId == item.id) R.string.stop_playback else R.string.play
-        ) to {
-            if (playingId == item.id) stopPlayback() else togglePlay(item, 0)
-        }
         if (pending && modelDir != null) {
             actions += activity.getString(R.string.action_transcribe) to { transcribe(item, modelDir) }
         }
@@ -207,6 +206,19 @@ class RecordingsController(
             )
             .setItems(labels) { _, which -> actions[which].second() }
             .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    /** 失败原因展示：标题 + 人话，技术细节放在下面一行。 */
+    private fun showError(error: ErrorCodes.UiError) {
+        if (error.level == ErrorCodes.Level.L0) {
+            Toast.makeText(activity, error.oneLine(), Toast.LENGTH_LONG).show()
+            return
+        }
+        AlertDialog.Builder(activity)
+            .setTitle(error.title)
+            .setMessage(error.body.ifBlank { error.title })
+            .setPositiveButton(android.R.string.ok, null)
             .show()
     }
 
@@ -264,18 +276,20 @@ class RecordingsController(
                 FileTranscriber.transcribe(activity, modelDir, path)
             }
             transcribingId = -1L
-            if (result == null) {
-                Toast.makeText(activity, activity.getString(R.string.transcribe_failed), Toast.LENGTH_SHORT).show()
+            if (result is FileTranscriber.Result.Failure) {
+                // 失败必须带回原因（音频解码 / 模型 / 内存），不能再一句「转写失败」
+                showError(ErrorCodes.transcribe(activity, result.message))
                 return@launch
             }
+            val success = result as FileTranscriber.Result.Success
             val modelName = ModelManager.getActiveModelId(activity)
                 ?.let { ModelCatalog.findById(activity, it)?.name } ?: "sherpa-onnx"
             repo.update(
                 item.copy(
-                    text = result.text,
-                    durationMs = if (result.durationMs > 0L) result.durationMs else item.durationMs,
+                    text = success.text,
+                    durationMs = if (success.durationMs > 0L) success.durationMs else item.durationMs,
                     modelName = modelName,
-                    segmentsJson = result.segmentsJson
+                    segmentsJson = success.segmentsJson
                 )
             )
             Toast.makeText(activity, activity.getString(R.string.transcribe_success), Toast.LENGTH_SHORT).show()
@@ -295,15 +309,20 @@ class RecordingsController(
                 FileTranscriber.transcribe(activity, modelDir, path)
             }
             busy = false
-            if (result?.segmentsJson == null) {
+            if (result is FileTranscriber.Result.Failure) {
+                showError(ErrorCodes.transcribe(activity, result.message))
+                return@launch
+            }
+            val success = result as FileTranscriber.Result.Success
+            if (success.segmentsJson == null) {
                 Toast.makeText(activity, activity.getString(R.string.rebuild_timeline_failed), Toast.LENGTH_SHORT).show()
                 return@launch
             }
             repo.update(
                 item.copy(
-                    text = item.text.ifBlank { result.text },
-                    segmentsJson = result.segmentsJson,
-                    durationMs = if (item.durationMs > 0L) item.durationMs else result.durationMs
+                    text = item.text.ifBlank { success.text },
+                    segmentsJson = success.segmentsJson,
+                    durationMs = if (item.durationMs > 0L) item.durationMs else success.durationMs
                 )
             )
             Toast.makeText(activity, activity.getString(R.string.rebuild_timeline_done), Toast.LENGTH_SHORT).show()
@@ -313,7 +332,7 @@ class RecordingsController(
     // ---------------- 列表适配器 ----------------
 
     private inner class RecordingsAdapter(
-        private val onPlay: (TranscriptEntity) -> Unit,
+        private val onPlay: (TranscriptEntity, Boolean) -> Unit,
         private val onSeek: (TranscriptEntity, Int) -> Unit,
         private val onSegment: (TranscriptEntity, Int) -> Unit,
         private val onMore: (TranscriptEntity) -> Unit
@@ -353,17 +372,28 @@ class RecordingsController(
             holder.lastPos = 0
 
             val pending = isPending(item)
-            b.tvBadge.isVisible = pending
 
-            // 「待转写」的记录（无模型时录的 / 导入的）在模型就绪后可以一键转写
+            // 「待转写」的记录（无模型时录的 / 导入的）：有模型 → CTA 转写；无模型 → 弹说明对话框
             val pendingModelDir = if (pending) ModelManager.getInstalledModelDirectory(activity) else null
-            b.btnTranscribe.isVisible = pendingModelDir != null
-            b.btnTranscribe.setOnClickListener { pendingModelDir?.let { dir -> transcribe(item, dir) } }
-
-            val isPlaying = item.id == playingId
-            b.btnPlay.text = activity.getString(
-                if (isPlaying && player?.isPlaying == true) R.string.stop_playback else R.string.play
+            b.btnTranscribe.isVisible = pending
+            b.btnTranscribe.text = activity.getString(
+                if (pendingModelDir != null) R.string.action_transcribe else R.string.recordings_cta_need_model
             )
+            b.btnTranscribe.setOnClickListener {
+                pendingModelDir?.let { dir -> transcribe(item, dir) }
+                    ?: pendingCta?.invoke(item.id)
+            }
+
+            // 圆形播放键：仅本卡可点，播放中变暂停图标
+            val isPlaying = item.id == playingId
+            val actuallyPlaying = isPlaying && player?.isPlaying == true
+            b.btnPlay.setIconResource(
+                if (actuallyPlaying) R.drawable.ic_pause else R.drawable.ic_play
+            )
+            b.btnPlay.contentDescription = activity.getString(
+                if (actuallyPlaying) R.string.stop_playback else R.string.play
+            )
+            b.btnPlay.isEnabled = !item.wavPath.isNullOrBlank()
             if (isPlaying) activeVh = holder else if (activeVh === holder) activeVh = null
 
             b.sbProgress.max = item.durationMs.coerceAtLeast(1L).toInt()
@@ -375,9 +405,9 @@ class RecordingsController(
             if (segments.isEmpty()) {
                 b.tvText.text = when {
                     item.text.isNotBlank() -> item.text
-                    pending -> activity.getString(R.string.pending_transcribe)
+                    pending -> activity.getString(R.string.recordings_pending_no_model)
                     !item.wavPath.isNullOrBlank() -> activity.getString(R.string.transcribe_empty)
-                    else -> "[空]"
+                    else -> activity.getString(R.string.recordings_empty_text)
                 }
                 b.tvText.movementMethod = null
                 b.tvText.maxLines = 6
@@ -402,7 +432,8 @@ class RecordingsController(
                 }
             }
 
-            b.btnPlay.setOnClickListener { onPlay(item) }
+            // 圆形主按钮：正在播 → 暂停；否则播放
+            b.btnPlay.setOnClickListener { onPlay(item, actuallyPlaying) }
             b.btnMore.setOnClickListener { onMore(item) }
             b.sbProgress.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(sb: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {

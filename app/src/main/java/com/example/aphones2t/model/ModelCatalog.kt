@@ -44,9 +44,36 @@ data class LocalModelInfo(
 ) {
     val downloadSizeBytes: Long get() = archive.sizeBytes
     val installedSizeBytes: Long get() = files.sumOf { it.sizeBytes }
+
+    /** 候选下载源链：主源 → GitHub 代理镜像 → HuggingFace → hf-mirror。 */
+    val sources: List<String> get() = MirrorResolver.candidates(archive.url, huggingFaceUrl)
+
+    /** 体积分档（阈值只写在这里，UI 不再自己判断）。 */
+    val tier: Tier get() = when {
+        archive.sizeBytes in 1..ENTRY_MAX_BYTES -> Tier.ENTRY
+        archive.sizeBytes <= DAILY_MAX_BYTES -> Tier.DAILY
+        else -> Tier.LARGE
+    }
+
+    /** 新用户第一条该下的模型（内置清单里标注的入门款）。 */
+    val isRecommendedEntry: Boolean get() = id == ModelCatalog.RECOMMENDED_ENTRY_ID
+
+    /** 下载体积档位：ENTRY 入门（几十 MB）/ DAILY 日常 / LARGE 大模型。 */
+    enum class Tier { ENTRY, DAILY, LARGE }
+
+    companion object {
+        const val ENTRY_MAX_BYTES = 64L * 1024 * 1024
+        const val DAILY_MAX_BYTES = 400L * 1024 * 1024
+    }
 }
 
 object ModelCatalog {
+
+    /**
+     * 入门推荐：官方最小的流式 Zipformer-CTC（int8，约 20MB）。
+     * 新用户第一条就该下这个 —— 下载最快、占用最小，装上就能实时转写。
+     */
+    const val RECOMMENDED_ENTRY_ID = "sherpa-onnx-streaming-zipformer-small-ctc-zh-int8-2025-04-01"
 
     // ---- built-in official streaming ASR models (sherpa-onnx, k2-fsa) ----
     //
@@ -295,6 +322,24 @@ object ModelCatalog {
     )
 
     fun all(context: Context): List<LocalModelInfo> = builtIn + customModels(context)
+
+    /**
+     * 推荐给新用户的第一个模型：优先内置标注的入门款，缺失时退化为体积最小的那个。
+     * 这样即使以后把 RECOMMENDED_ENTRY_ID 那条下架，UI 也不会崩。
+     */
+    fun recommended(context: Context): LocalModelInfo? =
+        all(context).firstOrNull { it.isRecommendedEntry }
+            ?: all(context).filter { it.downloadSizeBytes > 0L }
+                .minByOrNull { it.downloadSizeBytes }
+
+    /** 清单里真实出现过的语言标签（数据驱动，不写死语种列表）。 */
+    fun languageTags(context: Context): List<String> =
+        all(context)
+            .flatMap { it.language.split(",") }
+            .map { it.trim().lowercase() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .sorted()
 
     fun findById(context: Context, id: String?): LocalModelInfo? =
         all(context).firstOrNull { it.id == id }

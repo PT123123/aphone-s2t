@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Environment
 import android.os.StatFs
 import android.text.format.Formatter
+import com.example.aphones2t.R
 import java.io.File
 
 /**
@@ -111,16 +112,16 @@ object StorageUtils {
         val usedExternal = totalExternal - availableExternal
 
         return buildString {
-            append("内部存储:\n")
-            append("  总计: ${Formatter.formatFileSize(context, totalInternal)}\n")
-            append("  已用: ${Formatter.formatFileSize(context, usedInternal)}\n")
-            append("  可用: ${Formatter.formatFileSize(context, availableInternal)}\n")
+            append(context.getString(R.string.storage_internal_header))
+            append(context.getString(R.string.storage_total_line, Formatter.formatFileSize(context, totalInternal)))
+            append(context.getString(R.string.storage_used_line, Formatter.formatFileSize(context, usedInternal)))
+            append(context.getString(R.string.storage_available_line, Formatter.formatFileSize(context, availableInternal)))
 
             if (isExternalStorageReadable()) {
-                append("\n外部存储:\n")
-                append("  总计: ${Formatter.formatFileSize(context, totalExternal)}\n")
-                append("  已用: ${Formatter.formatFileSize(context, usedExternal)}\n")
-                append("  可用: ${Formatter.formatFileSize(context, availableExternal)}\n")
+                append(context.getString(R.string.storage_external_header))
+                append(context.getString(R.string.storage_total_line, Formatter.formatFileSize(context, totalExternal)))
+                append(context.getString(R.string.storage_used_line, Formatter.formatFileSize(context, usedExternal)))
+                append(context.getString(R.string.storage_available_line, Formatter.formatFileSize(context, availableExternal)))
             }
         }
     }

@@ -12,29 +12,6 @@
         app:menu="@menu/main_menu"
         app:title="@string/app_name" />
 
-    <!-- 三个页面：实时转写 / 录音 / 模型 -->
-    <com.google.android.material.tabs.TabLayout
-        android:id="@+id/tabLayout"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        app:tabGravity="fill"
-        app:tabMode="fixed">
-
-        <com.google.android.material.tabs.TabItem
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/tab_realtime" />
-
-        <com.google.android.material.tabs.TabItem
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/tab_recordings" />
-
-        <com.google.android.material.tabs.TabItem
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/tab_models" />
-    </com.google.android.material.tabs.TabLayout>
 
     <FrameLayout
         android:layout_width="match_parent"
@@ -49,159 +26,177 @@
             android:orientation="vertical"
             android:padding="12dp">
 
-            <!-- 当前模型卡片 -->
+            <!-- 模型条：一行放完（名称 / 元信息 / 「更换」）。切换与管理合并成一个入口。 -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:cardElevation="1dp"
+                app:cardBackgroundColor="?attr/colorSurfaceContainerLow"
+                app:cardElevation="0dp"
                 app:strokeWidth="0dp">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
+                    android:gravity="center_vertical"
+                    android:minHeight="56dp"
+                    android:orientation="horizontal"
                     android:paddingStart="14dp"
-                    android:paddingTop="10dp"
-                    android:paddingEnd="8dp"
-                    android:paddingBottom="8dp">
+                    android:paddingEnd="4dp">
 
                     <LinearLayout
-                        android:layout_width="match_parent"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
+                        android:layout_weight="1"
+                        android:orientation="vertical">
 
                         <TextView
-                            android:id="@+id/tvCurrentModelLabel"
-                            android:layout_width="0dp"
+                            android:id="@+id/tvCurrentModelName"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/current_model_label"
-                            android:textColor="?android:attr/textColorSecondary"
-                            android:textSize="12sp" />
+                            android:ellipsize="end"
+                            android:maxLines="1"
+                            android:text="@string/current_model_none"
+                            android:textColor="?android:attr/textColorPrimary"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
 
-                        <Button
-                            android:id="@+id/btnSwitchModel"
-                            android:layout_width="wrap_content"
+                        <TextView
+                            android:id="@+id/tvCurrentModelMeta"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:minWidth="0dp"
-                            android:minHeight="0dp"
-                            android:paddingStart="14dp"
-                            android:paddingTop="4dp"
-                            android:paddingEnd="14dp"
-                            android:paddingBottom="4dp"
-                            android:text="@string/switch_model"
+                            android:ellipsize="end"
+                            android:maxLines="1"
+                            android:text="@string/current_model_none_hint"
+                            android:textColor="?android:attr/textColorSecondary"
                             android:textSize="12sp" />
                     </LinearLayout>
 
-                    <TextView
-                        android:id="@+id/tvCurrentModelName"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/current_model_none"
-                        android:textSize="16sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/tvCurrentModelMeta"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:text="@string/current_model_none_hint"
-                        android:textColor="?android:attr/textColorSecondary"
-                        android:textSize="12sp" />
-
-                    <TextView
-                        android:id="@+id/btnManageModel"
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnChangeModel"
+                        style="@style/Widget.Material3.Button.TextButton"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:background="?attr/selectableItemBackground"
-                        android:paddingTop="6dp"
-                        android:paddingEnd="12dp"
-                        android:paddingBottom="4dp"
-                        android:text="@string/manage_models"
-                        android:textColor="?attr/colorPrimary"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
+                        android:contentDescription="@string/switch_model_cd"
+                        android:minWidth="0dp"
+                        android:text="@string/switch_model"
+                        android:textSize="13sp"
+                        app:icon="@drawable/ic_change_model"
+                        app:iconPadding="4dp"
+                        app:iconSize="18dp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
+
+            <!-- 计时：待机显示占位符，录音中显示已录时长；状态行只在录音 / 暂停 / 出错时出现 -->
+            <TextView
+                android:id="@+id/tvElapsed"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:text="@string/timer_idle"
+                android:textColor="?android:attr/textColorPrimary"
+                android:textSize="34sp" />
 
             <TextView
                 android:id="@+id/tvStatus"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:text="@string/idle_status"
-                android:textColor="?attr/colorPrimary"
-                android:textStyle="bold" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/transcript_label"
-                    android:textColor="?attr/colorPrimary"
-                    android:textStyle="bold" />
-
-                <Button
-                    android:id="@+id/btnCopyTranscript"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:minWidth="0dp"
-                    android:minHeight="0dp"
-                    android:paddingStart="12dp"
-                    android:paddingTop="4dp"
-                    android:paddingEnd="12dp"
-                    android:paddingBottom="4dp"
-                    android:text="@string/copy"
-                    android:textSize="12sp" />
-            </LinearLayout>
+                android:layout_marginTop="2dp"
+                android:gravity="center"
+                android:textColor="@color/error_text"
+                android:textSize="13sp"
+                android:visibility="gone" />
 
             <ScrollView
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
-                android:layout_marginTop="4dp"
-                android:layout_weight="1">
+                android:layout_marginTop="8dp"
+                android:layout_weight="1"
+                android:fillViewport="true">
 
                 <TextView
                     android:id="@+id/tvTranscript"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:hint="@string/hint_ready"
+                    android:lineSpacingExtra="4dp"
                     android:minHeight="140dp"
                     android:padding="12dp"
                     android:textIsSelectable="true"
-                    android:textSize="18sp" />
+                    android:textSize="17sp" />
             </ScrollView>
 
+            <!-- 控制区：复制（有文本才出现）+ 暂停 + 圆形录音主按钮 -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center"
-                android:orientation="horizontal">
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingTop="6dp"
+                android:paddingBottom="6dp">
 
-                <Button
-                    android:id="@+id/btnRecord"
+                <Space
                     android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:enabled="false"
-                    android:text="@string/start_recording" />
+                    android:layout_height="0dp"
+                    android:layout_weight="1" />
 
-                <Button
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCopyTranscript"
+                    style="@style/Widget.Material3.Button.IconButton"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:contentDescription="@string/copy"
+                    android:insetLeft="0dp"
+                    android:insetTop="0dp"
+                    android:insetRight="0dp"
+                    android:insetBottom="0dp"
+                    android:visibility="gone"
+                    app:icon="@drawable/ic_copy"
+                    app:iconGravity="textStart"
+                    app:iconPadding="0dp" />
+
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnPause"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:text="@string/pause_recording"
-                    android:visibility="gone" />
+                    style="@style/Widget.Material3.Button.IconButton.Filled.Tonal"
+                    android:layout_width="56dp"
+                    android:layout_height="56dp"
+                    android:layout_marginStart="10dp"
+                    android:contentDescription="@string/btn_pause_cd"
+                    android:insetLeft="0dp"
+                    android:insetTop="0dp"
+                    android:insetRight="0dp"
+                    android:insetBottom="0dp"
+                    android:visibility="gone"
+                    app:icon="@drawable/ic_pause"
+                    app:iconGravity="textStart"
+                    app:iconPadding="0dp"
+                    app:iconSize="26dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnRecord"
+                    style="@style/Widget.Material3.Button.IconButton.Filled"
+                    android:layout_width="72dp"
+                    android:layout_height="72dp"
+                    android:layout_marginStart="16dp"
+                    android:checkable="true"
+                    android:contentDescription="@string/btn_record_cd"
+                    android:insetLeft="0dp"
+                    android:insetTop="0dp"
+                    android:insetRight="0dp"
+                    android:insetBottom="0dp"
+                    app:backgroundTint="@color/btn_record_tint"
+                    app:cornerRadius="36dp"
+                    app:icon="@drawable/ic_mic"
+                    app:iconGravity="textStart"
+                    app:iconPadding="0dp"
+                    app:iconSize="30dp"
+                    app:iconTint="@color/btn_record_icon_tint" />
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:layout_weight="1" />
             </LinearLayout>
         </LinearLayout>
 
@@ -388,27 +383,14 @@
                     android:visibility="gone" />
             </FrameLayout>
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:orientation="horizontal"
-                android:padding="10dp">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnAddModel"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="10dp"
-                    android:text="@string/custom_model_add" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnPasteModels"
-                    style="@style/Widget.Material3.Button.OutlinedButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/settings_paste_custom_models" />
-            </LinearLayout>
         </LinearLayout>
     </FrameLayout>
+
+    <!-- 底栏三目的地：转写 / 录音 / 模型（设置留在右上角齿轮） -->
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottomNav"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:labelVisibilityMode="labeled"
+        app:menu="@menu/menu_bottom_nav" />
 </LinearLayout>

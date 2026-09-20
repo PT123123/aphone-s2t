@@ -76,7 +76,7 @@ class ModelDownloadWorker(
             checkFreeSpace(model, staging)
 
             stage = STAGE_DOWNLOADING
-            downloadArchive(model, staging)
+            downloadWithMirrors(model, staging)
 
             stage = STAGE_EXTRACTING
             publish()
@@ -121,7 +121,74 @@ class ModelDownloadWorker(
 
     // ---------------- download ----------------
 
-    private suspend fun downloadArchive(model: LocalModelInfo, staging: File) {
+    /**
+     * 按「主源 → GitHub 代理镜像 → HuggingFace → hf-mirror」的顺序依次尝试下载。
+     *
+     * 为什么要有这个循环：内置模型都在 GitHub Release 上，国内网络直连经常 403 / 超时，
+     * 而失败后重试还是打同一个地址 —— 用户就没有出路了。现在一个源失败自动换下一个，
+     * 成功的源会记下来（下次优先用），用户也可以点「换镜像重试」手动跳下一个。
+     *
+     * @param startIndex 显式指定的起始源（UI 点「换镜像」时传入）；默认用上次成功的源。
+     */
+    private suspend fun downloadWithMirrors(model: LocalModelInfo, staging: File) {
+        val sources = MirrorResolver.candidates(model.archive.url, model.huggingFaceUrl)
+        if (sources.isEmpty()) throw IOException("模型没有可用的下载地址")
+
+        val startIndex = inputData.getInt(
+            KEY_SOURCE_INDEX,
+            MirrorResolver.preferredIndex(applicationContext, model.id)
+        ).coerceIn(0, sources.lastIndex)
+
+        var lastError: Throwable? = null
+        for (index in startIndex until sources.size) {
+            val url = sources[index]
+            sourceUrl = url
+            httpCode = 0
+            try {
+                if (index > startIndex) {
+                    // 换源必须重新打点：进度条要回到 0，别让用户以为文件坏了
+                    downloadedBytes = 0L
+                    bytesPerSec = 0L
+                    etaSec = 0L
+                    DownloadDiagnostics.log(
+                        applicationContext, modelId,
+                        "改用 ${MirrorResolver.label(applicationContext, url)} 重试"
+                    )
+                    publish()
+                }
+                downloadArchive(model, staging, url)
+                MirrorResolver.rememberIndex(applicationContext, model.id, index)
+                if (index != startIndex) {
+                    DownloadDiagnostics.log(
+                        applicationContext, modelId,
+                        "${MirrorResolver.label(applicationContext, url)} 下载成功"
+                    )
+                }
+                return
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (e: Throwable) {
+                // 保留原始异常（而不是裹一层 IOException）：错误码判定需要看到
+                // 真实的异常类型（SocketTimeoutException / UnknownHostException …）
+                lastError = e
+                lastFailure = DownloadError(
+                    stage = STAGE_DOWNLOADING,
+                    type = e.javaClass.name,
+                    message = e.message ?: e.javaClass.simpleName,
+                    httpCode = httpCode,
+                    url = url,
+                    downloadedBytes = downloadedBytes
+                )
+                DownloadDiagnostics.log(
+                    applicationContext, modelId,
+                    "${MirrorResolver.label(applicationContext, url)} 失败：${e.message ?: e.javaClass.simpleName}"
+                )
+            }
+        }
+        throw lastError ?: IOException("所有下载源都失败了（共尝试 ${sources.size} 个源）")
+    }
+
+    private suspend fun downloadArchive(model: LocalModelInfo, staging: File, url: String) {
         val name = model.archive.name
         val complete = File(staging, name)
         val sizeKnown = model.archive.sizeBytes > 0
@@ -137,6 +204,24 @@ class ModelDownloadWorker(
         }
 
         val partial = File(staging, "$name.part")
+
+        // 「断点续传不换源」：分片是哪个源下的，就只跟那个源续传。
+        // 换了源还带 Range 偏移去要数据，拼出来的压缩包必坏。
+        val sourceMarker = File(staging, "$name.src")
+        val markedUrl = try {
+            if (sourceMarker.isFile) sourceMarker.readText().trim() else ""
+        } catch (_: Exception) {
+            ""
+        }
+        if (partial.length() > 0L && markedUrl != url) {
+            DownloadDiagnostics.log(applicationContext, modelId, "下载源变了，旧分片作废重新下载")
+            partial.delete()
+        }
+        try {
+            sourceMarker.writeText(url)
+        } catch (_: Exception) {
+        }
+
         if (sizeKnown && partial.length() == model.archive.sizeBytes) {
             if (sha == null || sha256(partial) == sha) {
                 downloadedBytes = partial.length()
@@ -157,7 +242,7 @@ class ModelDownloadWorker(
         }
 
         val request = Request.Builder()
-            .url(model.archive.url)
+            .url(url)
             .header("User-Agent", "AphoneS2T/1.0")
             .apply { if (sizeKnown && offset > 0) header("Range", "bytes=$offset-") }
             .build()
@@ -413,6 +498,9 @@ class ModelDownloadWorker(
 
     companion object {
         const val KEY_MODEL_ID = "model_id"
+
+        /** 指定从候选源链的第几个源开始下（不传则用上次成功的源）。 */
+        const val KEY_SOURCE_INDEX = "source_index"
         const val KEY_PROGRESS = "progress"
         const val KEY_DOWNLOADED_BYTES = "downloaded_bytes"
         const val KEY_TOTAL_BYTES = "total_bytes"

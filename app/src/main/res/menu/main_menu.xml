@@ -1,12 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
+    <!-- 导入只在「录音」页出现；添加 / 批量粘贴只在「模型」页出现（MainActivity 按页切可见性） -->
     <item
         android:id="@+id/action_import"
+        android:icon="@drawable/ic_import"
         android:title="@string/menu_import"
         app:showAsAction="ifRoom" />
     <item
-        android:id="@+id/action_settings"
-        android:title="@string/settings_title"
+        android:id="@+id/action_add_model"
+        android:title="@string/custom_model_add"
         app:showAsAction="never" />
+    <item
+        android:id="@+id/action_paste_models"
+        android:title="@string/settings_paste_custom_models"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_settings"
+        android:icon="@drawable/ic_settings"
+        android:title="@string/settings_title"
+        app:showAsAction="ifRoom" />
 </menu>
+

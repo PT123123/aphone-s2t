@@ -29,4 +29,12 @@
     <color name="text_primary">#212121</color>
     <color name="text_secondary">#757575</color>
     <color name="text_hint">#9E9E9E</color>
+
+    <!-- 语义色：深色模式在 values-night 重定义，禁止在布局里直接写黑/白 -->
+    <color name="text_title">#1B1B1F</color>
+    <color name="text_main">#1D1B20</color>
+    <color name="text_sub">#49454F</color>
+    <color name="text_disabled">#79747E</color>
+    <color name="surface_card">#FFFFFF</color>
+    <color name="error_text">#B3261E</color>
 </resources>

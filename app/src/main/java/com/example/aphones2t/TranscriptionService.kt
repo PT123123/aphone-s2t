@@ -18,6 +18,7 @@ import com.example.aphones2t.asr.SherpaStreamingAsr
 import com.example.aphones2t.data.TranscriptSegment
 import com.example.aphones2t.data.TranscriptSegments
 import com.example.aphones2t.model.ModelManager
+import com.example.aphones2t.utils.ErrorCodes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -50,6 +51,12 @@ class TranscriptionService : Service() {
         const val EXTRA_TEXT = "text"
         const val EXTRA_WAV = "wav"
         const val EXTRA_DURATION = "duration"
+
+        /** 错误码（见 utils/ErrorCodes.kt），UI 按码决定弹窗还是 Toast。 */
+        const val EXTRA_ERROR_CODE = "error_code"
+        const val ERR_ASR_INIT = "ERR_ASR_INIT"
+        const val ERR_MIC = "ERR_MIC"
+        const val ERR_RECORD = "ERR_RECORD"
 
         /** 分段时间轴 JSON（[{s,e,t}]），用于「点文字跳到对应录音位置」。 */
         const val EXTRA_SEGMENTS = "segments"
@@ -112,8 +119,12 @@ class TranscriptionService : Service() {
     private fun notification() = NotificationCompat.Builder(this, CHANNEL_ID)
         .setContentTitle(getString(R.string.notification_title))
         .setContentText(
-            if (noModel) getString(R.string.notification_no_model)
-            else getString(R.string.notification_content)
+            when {
+                noModel && paused -> getString(R.string.notification_paused_no_model)
+                paused -> getString(R.string.notification_paused)
+                noModel -> getString(R.string.notification_no_model)
+                else -> getString(R.string.notification_content)
+            }
         )
         .setSmallIcon(android.R.drawable.ic_btn_speak_now)
         .setContentIntent(
@@ -134,6 +145,16 @@ class TranscriptionService : Service() {
         )
     }
 
+    /** 带错误码的广播：UI 据此选文案与展示方式（弹窗 / 状态行）。 */
+    private fun broadcastError(code: String, detail: String = "") {
+        sendBroadcast(
+            Intent(ACTION_ERROR)
+                .setPackage(packageName)
+                .putExtra(EXTRA_ERROR_CODE, code)
+                .putExtra(EXTRA_TEXT, detail)
+        )
+    }
+
     private fun startRecording() {
         if (recording) return
         hasError = false
@@ -147,11 +168,15 @@ class TranscriptionService : Service() {
             noModel = false
             asr = SherpaStreamingAsr()
             if (!asr!!.init(modelDir)) {
-                broadcast(ACTION_ERROR, "ASR 初始化失败")
-                asr?.release(); asr = null
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
-                return
+                // 模型加载失败**不再**停服务、不再只弹一句 Toast：
+                // 降级为「仅录音」继续把音频录下来（不丢录音），
+                // 并把「缺了哪些文件」广播给 UI，让用户知道去哪儿修。
+                asr?.release()
+                asr = null
+                noModel = true
+                val missing = ErrorCodes.missingRoles(ModelManager.getInstalledModelDirectory(this))
+                Log.w(TAG, "ASR init failed, fall back to record-only. missing=$missing")
+                broadcastError(ERR_ASR_INIT, missing.joinToString(","))
             }
         } else {
             noModel = true
@@ -162,7 +187,7 @@ class TranscriptionService : Service() {
             SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
         )
         if (minBuf <= 0) {
-            broadcast(ACTION_ERROR, "音频设备不可用")
+            broadcastError(ERR_MIC, getString(R.string.record_no_mic))
             cleanup(); stopSelf(); return
         }
         audioRecord = AudioRecord(
@@ -173,7 +198,7 @@ class TranscriptionService : Service() {
             (minBuf * 2).coerceAtLeast(CHUNK_SAMPLES * 2)
         )
         if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
-            broadcast(ACTION_ERROR, "无法打开麦克风")
+            broadcastError(ERR_MIC, getString(R.string.record_no_mic))
             cleanup(); stopSelf(); return
         }
 
@@ -220,6 +245,8 @@ class TranscriptionService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "recordLoop error", e)
             hasError = true
+            // 录音循环崩了：告诉用户「音频还在」，而不是静默失败
+            broadcastError(ERR_RECORD, e.message ?: e.javaClass.simpleName)
         }
     }
 
@@ -227,6 +254,7 @@ class TranscriptionService : Service() {
         if (!recording || paused) return
         paused = true
         try { audioRecord?.stop() } catch (_: Exception) {}
+        refreshNotification()
     }
 
     private fun resumeRecording() {
@@ -234,6 +262,15 @@ class TranscriptionService : Service() {
         try {
             audioRecord?.startRecording()
             if (audioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) paused = false
+        } catch (_: Exception) {}
+        refreshNotification()
+    }
+
+    /** 状态切换后刷新常驻通知文案（暂停 / 继续）。 */
+    private fun refreshNotification() {
+        try {
+            val nm = getSystemService(NotificationManager::class.java)
+            nm.notify(NOTIFICATION_ID, notification())
         } catch (_: Exception) {}
     }
 
@@ -329,8 +366,8 @@ class TranscriptionService : Service() {
         val f = outputTxt ?: return
         val body = when {
             text.isNotBlank() -> text
-            noModel -> "[已录音，等待下载模型后转写]"
-            else -> "[未检测到语音]"
+            noModel -> getString(R.string.txt_no_model)
+            else -> getString(R.string.txt_no_speech)
         }
         val duration = SimpleDateFormat("mm:ss", Locale.getDefault()).format(Date(durationMs))
         val timeline = TranscriptSegments.decode(segmentsJson).joinToString("\n") { seg ->
@@ -339,9 +376,9 @@ class TranscriptionService : Service() {
         try {
             f.writeText(
                 buildString {
-                    append("实时转写 ${outputWav?.nameWithoutExtension}\n")
-                    append("时长: $duration\n")
-                    append("引擎: sherpa-onnx 流式模型\n")
+                    append(getString(R.string.txt_header_title, outputWav?.nameWithoutExtension ?: ""))
+                    append(getString(R.string.txt_header_duration, duration))
+                    append(getString(R.string.txt_header_engine))
                     append("---\n\n")
                     if (timeline.isNotBlank()) {
                         append(timeline)
