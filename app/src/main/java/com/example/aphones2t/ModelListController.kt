@@ -2,8 +2,10 @@ package com.example.aphones2t
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Context
 import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.LinearLayout
@@ -16,11 +18,15 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.example.aphones2t.databinding.ItemModelBinding
+import com.example.aphones2t.databinding.ItemModelGuideBinding
 import com.example.aphones2t.model.DownloadDiagnostics
+import com.example.aphones2t.model.MirrorResolver
+import com.example.aphones2t.model.ModelCatalog
 import com.example.aphones2t.model.ModelInstallStatus
 import com.example.aphones2t.model.ModelManager
 import com.example.aphones2t.model.ModelState
 import com.example.aphones2t.model.ModelStatusFilter
+import com.example.aphones2t.utils.ErrorCodes
 import com.example.aphones2t.utils.FormatUtils
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.Chip
@@ -55,10 +61,18 @@ class ModelListController(
     private var renderedOrder: List<String> = emptyList()
     private val expanded = mutableSetOf<String>()
 
-    private val langLabels = arrayOf("全部", "中文", "中英", "粤语", "英文", "韩语", "法语", "孟加拉语")
-    private val langKeys = arrayOf("all", "zh", "zh+en", "yue", "en", "ko", "fr", "bn")
-    private val sortLabels = arrayOf("默认顺序", "大小从大到小", "大小从小到大")
+    /** 语言筛选：从目录里真实出现的语言标签生成（数据驱动，加语种不用改这里）。 */
+    private var langLabels = arrayOf<String>()
+    private var langKeys = arrayOf<String>()
+    private val sortLabels get() = arrayOf(
+        activity.getString(R.string.sort_default),
+        activity.getString(R.string.sort_desc),
+        activity.getString(R.string.sort_asc)
+    )
     private val sortKeys = arrayOf("default", "desc", "asc")
+
+    /** 顶部引导 / 入门推荐卡（只在「一个模型都没装」时出现，装好即消失）。 */
+    private var guideCard: ItemModelGuideBinding? = null
 
     fun start() {
         setupFilters()
@@ -90,7 +104,7 @@ class ModelListController(
             render()
         }
 
-        val langAdapter = ArrayAdapter(activity, android.R.layout.simple_spinner_item, langLabels)
+        val langAdapter = ArrayAdapter(activity, android.R.layout.simple_spinner_item, buildLanguageOptions())
         langAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         spLanguage.adapter = langAdapter
         spLanguage.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
@@ -114,6 +128,49 @@ class ModelListController(
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
     }
+
+    /**
+     * 语言下拉项：从 ModelCatalog 里真实存在的语言标签生成。
+     * 以前写死八项（含不存在的语种），新增模型语言不会出现在筛选里，「其它语种」也选不到。
+     */
+    private fun buildLanguageOptions(): Array<String> {
+        val labels = mutableListOf(activity.getString(R.string.filter_all))
+        val keys = mutableListOf("all")
+        val tags = ModelCatalog.languageTags(activity)
+        if (tags.contains("zh")) {
+            labels += languageLabel(activity, "zh"); keys += "zh"
+            if (tags.contains("en")) {
+                labels += "${languageLabel(activity, "zh")} + ${languageLabel(activity, "en")}"; keys += "zh+en"
+            }
+        }
+        tags.filter { it != "zh" }.forEach { labels += languageLabel(activity, it); keys += it }
+        langLabels = labels.toTypedArray()
+        langKeys = keys.toTypedArray()
+        return langLabels
+    }
+
+    /** 顶部引导卡：一个模型都没装时，把「先装哪个」讲清楚（20MB 入门款置顶）。 */
+    private fun ensureGuideCard() {
+        if (guideCard != null) return
+        val binding = ItemModelGuideBinding.inflate(LayoutInflater.from(activity), container, false)
+        val recommended = ModelCatalog.recommended(activity)
+        binding.tvGuideBody.text = recommended?.let { info ->
+            activity.getString(
+                R.string.guide_recommend_body,
+                info.name,
+                FormatUtils.size(activity, info.downloadSizeBytes)
+            )
+        } ?: activity.getString(R.string.guide_no_model_body)
+        binding.btnGuideDownload.isVisible = recommended != null
+        binding.btnGuideDownload.setOnClickListener {
+            recommended?.let { ModelManager.download(activity, it) }
+        }
+        guideCard = binding
+    }
+
+    /** 引导卡是否该出现：没有任何已安装模型、也没有正在下载的任务。 */
+    private fun shouldShowGuide(): Boolean =
+        lastStates.none { it.isInstalled || it.status != ModelInstallStatus.NOT_INSTALLED }
 
     private fun updateChipCounts() {
         fun label(chipId: Int, base: String, filter: ModelStatusFilter) {
@@ -156,6 +213,19 @@ class ModelListController(
         emptyView.isVisible = false
 
         val ids = sorted.map { it.info.id }
+
+        // 0) 顶部引导卡（没有任何模型时出现，顺带把入门款放在最显眼处）
+        if (shouldShowGuide()) {
+            ensureGuideCard()
+            guideCard?.root?.let { root ->
+                if (container.indexOfChild(root) != 0) {
+                    (root.parent as? ViewGroup)?.removeView(root)
+                    container.addView(root, 0)
+                }
+            }
+        } else {
+            guideCard?.root?.let { root -> (root.parent as? ViewGroup)?.removeView(root) }
+        }
 
         // 1) 回收不再显示的卡片
         holders.keys.toList().filter { it !in ids }.forEach { id ->
@@ -203,9 +273,9 @@ class ModelListController(
         b.tvName.text = info.name
         b.tvBadge.isVisible = state.isActive
         b.tvMeta.text = listOf(
-            languageLabel(info.language),
+            languageLabel(activity, info.language),
             "sherpa-onnx",
-            FormatUtils.size(activity, info.downloadSizeBytes, "大小未知")
+            FormatUtils.size(activity, info.downloadSizeBytes, activity.getString(R.string.size_unknown))
         ).joinToString(" · ")
 
         val statusText = when (state.status) {
@@ -266,12 +336,14 @@ class ModelListController(
             b.tvPercent.text = ""
         }
 
-        // ---- 失败原因 ----
+        // ---- 失败原因：先给人话，技术细节点「详情」再看 ----
         b.tvError.isVisible = state.hasFailure
         if (state.hasFailure) {
-            val summary = state.errorDetail?.summary() ?: state.error.orEmpty()
-            b.tvError.text = activity.getString(R.string.model_failed_prefix, summary) +
-                "\n" + activity.getString(R.string.model_details_tap_hint)
+            val ui = downloadError(state)
+            b.tvError.text = activity.getString(
+                R.string.model_failed_prefix,
+                ui.body.ifBlank { ui.title }
+            ) + "\n" + activity.getString(R.string.model_details_tap_hint)
         }
 
         // ---- 详情 ----
@@ -291,13 +363,18 @@ class ModelListController(
                 }
 
             ModelInstallStatus.FAILED -> {
-                actionButton(b, activity.getString(R.string.action_retry)) {
-                    ModelManager.download(activity, info)
+                // 只留两个按钮：403 / 超时给「换镜像重试」（换一个源，而不是又打同一个地址），
+                // 其它失败给普通「重试」；「详情」始终在右侧看完整现场。
+                val ui = downloadError(state)
+                when {
+                    ui.offerMirror -> actionButton(b, activity.getString(R.string.action_switch_mirror)) {
+                        ModelManager.retryWithNextMirror(activity, info)
+                    }
+                    ui.offerRetry -> actionButton(b, activity.getString(R.string.action_retry)) {
+                        ModelManager.download(activity, info)
+                    }
                 }
-                actionButton(b, activity.getString(R.string.detail_error_message)) { showErrorDialog(state) }
-                actionButton(b, activity.getString(R.string.action_cancel)) {
-                    ModelManager.cancel(activity, info)
-                }
+                actionButton(b, activity.getString(R.string.action_details)) { showErrorDialog(state) }
             }
 
             ModelInstallStatus.QUEUED, ModelInstallStatus.DOWNLOADING, ModelInstallStatus.VERIFYING -> {
@@ -334,6 +411,18 @@ class ModelListController(
         }
     }
 
+    /** 把下载失败现场翻译成人话（403 / 超时 / 空间 / 校验 / 未知）。 */
+    private fun downloadError(state: ModelState): ErrorCodes.UiError {
+        val err = state.errorDetail
+        return ErrorCodes.download(
+            context = activity,
+            httpCode = err?.httpCode ?: 0,
+            type = err?.type,
+            message = err?.message ?: state.error,
+            details = buildDetails(state)
+        )
+    }
+
     private fun buildProgressInfo(state: ModelState): String = when {
         state.status == ModelInstallStatus.QUEUED -> activity.getString(R.string.stage_queued)
         state.downloadedBytes > 0L && state.totalBytes > 0L -> buildString {
@@ -350,7 +439,7 @@ class ModelListController(
                     activity.getString(
                         R.string.progress_speed,
                         FormatUtils.speed(activity, state.bytesPerSec),
-                        FormatUtils.eta(state.etaSec)
+                        FormatUtils.eta(activity, state.etaSec)
                     )
                 )
             }
@@ -378,11 +467,20 @@ class ModelListController(
         if (state.stage.isNotBlank()) {
             row(activity.getString(R.string.detail_stage), stageLabel(state.stage))
         }
-        row(activity.getString(R.string.detail_language), languageLabel(info.language))
-        row(activity.getString(R.string.detail_engine), "sherpa-onnx（流式离线识别）")
+        row(activity.getString(R.string.detail_language), languageLabel(activity, info.language))
+        row(activity.getString(R.string.detail_engine), activity.getString(R.string.engine_sherpa))
         row(
             activity.getString(R.string.detail_download_size),
-            FormatUtils.size(activity, info.downloadSizeBytes, "未知")
+            FormatUtils.size(activity, info.downloadSizeBytes, activity.getString(R.string.unknown))
+        )
+        // 建议内存以前只在数据里躺着，从不显示 —— 低内存机装大模型必然翻车
+        if (info.minRamMb > 0) {
+            row(activity.getString(R.string.detail_min_ram), "${info.minRamMb} MB")
+        }
+        row(
+            activity.getString(R.string.detail_sources),
+            activity.getString(R.string.detail_sources_value, MirrorResolver.sourceCount(info)) +
+                info.sources.joinToString(" / ") { MirrorResolver.label(activity, it) }
         )
         if (state.isInstalled) {
             row(
@@ -395,7 +493,7 @@ class ModelListController(
         }
         if (state.bytesPerSec > 0L) {
             row(activity.getString(R.string.detail_speed), FormatUtils.speed(activity, state.bytesPerSec))
-            row(activity.getString(R.string.detail_eta), FormatUtils.eta(state.etaSec))
+            row(activity.getString(R.string.detail_eta), FormatUtils.eta(activity, state.etaSec))
         }
         if (state.installedPath.isNotBlank()) {
             row(activity.getString(R.string.detail_install_path), state.installedPath)
@@ -441,19 +539,20 @@ class ModelListController(
     }
 
     private fun showErrorDialog(state: ModelState) {
+        val ui = downloadError(state)
         val builder = AlertDialog.Builder(activity)
-            .setTitle(
-                if (state.hasFailure) R.string.model_error_dialog_title else R.string.model_details
-            )
+            .setTitle(ui.title)
             .setMessage(buildDetails(state))
             .setNegativeButton(android.R.string.cancel, null)
             .setNeutralButton(R.string.action_copy_details) { _, _ -> copyDetails(state) }
-        if (state.hasFailure) {
-            builder.setPositiveButton(R.string.action_retry) { _, _ ->
+        when {
+            ui.offerMirror -> builder.setPositiveButton(R.string.action_switch_mirror) { _, _ ->
+                ModelManager.retryWithNextMirror(activity, state.info)
+            }
+            ui.offerRetry -> builder.setPositiveButton(R.string.action_retry) { _, _ ->
                 ModelManager.download(activity, state.info)
             }
-        } else {
-            builder.setPositiveButton(android.R.string.ok, null)
+            else -> builder.setPositiveButton(android.R.string.ok, null)
         }
         builder.show()
     }
@@ -464,7 +563,7 @@ class ModelListController(
             .setMessage(
                 activity.getString(
                     R.string.model_delete_confirm,
-                    FormatUtils.size(activity, state.installedSizeBytes, "未知")
+                    FormatUtils.size(activity, state.installedSizeBytes, activity.getString(R.string.unknown))
                 )
             )
             .setPositiveButton(R.string.action_delete) { _, _ ->
@@ -521,19 +620,19 @@ class ModelListController(
 
     companion object {
         /** 语言代码（"zh,en"）转中文标签，供模型卡片与切换弹窗共用。 */
-        fun languageLabel(code: String): String = code.split(",")
+        fun languageLabel(context: Context, code: String): String = code.split(",")
             .mapNotNull {
                 when (it.trim().lowercase()) {
-                    "zh" -> "中文"
-                    "en" -> "英文"
-                    "yue" -> "粤语"
-                    "ko" -> "韩语"
-                    "fr" -> "法语"
-                    "bn" -> "孟加拉语"
+                    "zh" -> context.getString(R.string.lang_zh)
+                    "en" -> context.getString(R.string.lang_en)
+                    "yue" -> context.getString(R.string.lang_yue)
+                    "ko" -> context.getString(R.string.lang_ko)
+                    "fr" -> context.getString(R.string.lang_fr)
+                    "bn" -> context.getString(R.string.lang_bn)
                     else -> it.trim().takeIf { s -> s.isNotEmpty() }
                 }
             }
             .joinToString("·")
-            .ifBlank { "未标注" }
+            .ifBlank { context.getString(R.string.lang_unknown) }
     }
 }

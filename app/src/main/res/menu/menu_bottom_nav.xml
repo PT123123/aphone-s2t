@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 底部导航三目的地：转写 / 录音 / 模型（设置在右上角齿轮，不进底栏） -->
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_realtime"
+        android:icon="@drawable/ic_nav_realtime"
+        android:title="@string/tab_realtime" />
+    <item
+        android:id="@+id/nav_recordings"
+        android:icon="@drawable/ic_nav_recordings"
+        android:title="@string/tab_recordings" />
+    <item
+        android:id="@+id/nav_models"
+        android:icon="@drawable/ic_nav_models"
+        android:title="@string/tab_models" />
+</menu>

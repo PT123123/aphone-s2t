@@ -185,6 +185,9 @@
     <string name="playback_failed">播放失败</string>
     <string name="recordings_expand">展开全文</string>
     <string name="recordings_collapse">收起</string>
+    <string name="recordings_cta_need_model">下载模型后转写</string>
+    <string name="recordings_empty_text">[空]</string>
+    <string name="recordings_pending_no_model">[待转写] 暂无识别模型，下载后点击「下载模型后转写」即可</string>
 
     <!-- ============ 实时转写页：当前模型 ============ -->
     <string name="current_model_label">当前模型</string>
@@ -215,9 +218,38 @@
     <string name="model_failed_prefix">失败原因：%1$s</string>
     <string name="model_error_dialog_title">下载失败详情</string>
     <string name="action_retry">重试</string>
+    <string name="action_switch_mirror">换镜像重试</string>
     <string name="action_copy_details">复制详情</string>
     <string name="details_copied">已复制到剪贴板</string>
     <string name="download_continues_hint">下载在后台继续，退出本页面不影响</string>
+
+    <!-- ============ 错误码人话（详情/技术信息保留在下方折叠区） ============ -->
+    <string name="err_need_model_title">还没有可用于转写的模型</string>
+    <string name="err_need_model_body">录音已经保存好了，只差一个识别模型。装好之后回到这条记录，点「转写」即可。</string>
+    <string name="err_dl_403_title">下载被服务器拒绝（403）</string>
+    <string name="err_dl_403_body">可能是链接过期或访问太频繁。试试换一个下载源。</string>
+    <string name="err_dl_404_title">下载地址不存在（404）</string>
+    <string name="err_dl_404_body">文件可能已被移动或下架。如果是自定义模型，请确认链接仍然有效。</string>
+    <string name="err_dl_timeout_title">连接超时</string>
+    <string name="err_dl_timeout_body">网络不稳或主源太慢。已下载的部分会保留，换一个下载源试试。</string>
+    <string name="err_dl_network_title">连不上服务器</string>
+    <string name="err_dl_network_body">请检查网络后重试；如果网络正常，可能是该站点临时不可用。</string>
+    <string name="err_dl_space_title">存储空间不足</string>
+    <string name="err_dl_space_body">清理空间后再试；已下载的部分已保留，不会浪费。</string>
+    <string name="err_dl_checksum_title">文件校验失败</string>
+    <string name="err_dl_checksum_body">下载的文件不完整或已损坏，重试会重新下载。</string>
+    <string name="err_dl_unknown_title">下载失败</string>
+    <string name="err_dl_unknown_body">可以稍后重试；反复失败时，请复制详情反馈。</string>
+    <string name="err_import_format_title">无法读取这个音频</string>
+    <string name="err_import_format_body">格式不受支持或文件已损坏。支持 m4a / wav / mp3 / flac 等常见格式。</string>
+    <string name="err_import_unknown_title">导入失败</string>
+    <string name="err_generic_title">操作失败</string>
+    <string name="err_generic_body">请重试；反复失败可以在「设置 → 导出日志」里反馈。</string>
+    <string name="err_perm_body">没有麦克风权限就无法录音。可以再次点击录音按钮来授权。</string>
+    <string name="err_perm_forever_body">麦克风权限被永久拒绝。请到「系统设置 → 应用 → 实时语音转写 → 权限」里打开麦克风。</string>
+    <string name="err_tr_oom_title">转写中断：内存不足</string>
+    <string name="err_tr_oom_body">这段音频太长或当前模型太大。可以先换小模型，或用较短音频重试。</string>
+    <string name="err_tr_unknown_title">转写失败</string>
 
     <string name="detail_status">状态</string>
     <string name="detail_stage">当前阶段</string>
@@ -260,4 +292,113 @@
     <string name="recordings_delete_confirm">删除这条录音及其音频文件？</string>
     <string name="model_downloading_meta">正在下载：%1$s（%2$d%%），完成后自动使用</string>
     <string name="model_not_active">未启用</string>
+
+    <!-- ============ 实时页主按钮 / 计时 ============ -->
+    <string name="btn_record_start">开始录音</string>
+    <string name="btn_record_stop">停止</string>
+    <string name="btn_pause">暂停</string>
+    <string name="btn_resume">继续</string>
+    <string name="status_recording">录音中…</string>
+    <string name="status_paused">已暂停</string>
+    <string name="timer_idle">--:--</string>
+    <string name="btn_pause_cd">暂停录音</string>
+    <string name="btn_resume_cd">继续录音</string>
+    <string name="btn_record_cd">开始录音</string>
+    <string name="btn_stop_cd">停止录音</string>
+    <string name="switch_model_cd">更换识别模型</string>
+    <string name="record_no_mic">无法打开麦克风，可能被其他应用占用，请关闭后重试</string>
+    <string name="record_error">录音出错，已自动保存音频</string>
+    <string name="save_failed">保存录音失败，请检查存储空间</string>
+
+    <!-- ============ 顶部菜单 ============ -->
+    <string name="action_settings_cd">设置</string>
+
+    <!-- ============ 错误码：ASR 初始化失败 ============ -->
+    <string name="err_asr_init_title">识别模型加载失败，本次仅录音</string>
+    <string name="err_asr_init_body">录音不受影响，音频照常保存。检测到模型文件缺失：\n%1$s\n\n可到「模型」页重新下载当前模型。</string>
+    <string name="err_asr_file_encoder">encoder（编码器）</string>
+    <string name="err_asr_file_decoder">decoder（解码器）</string>
+    <string name="err_asr_file_tokens">tokens（词表）</string>
+    <string name="err_mic_title">麦克风被占用</string>
+    <string name="err_mic_body">无法打开麦克风，可能被通话或其他录音应用占用。关闭占用后重试。</string>
+    <string name="err_room_title">录音保存失败</string>
+    <string name="err_room_body">音频文件已保存，但记录未写入列表。%1$s重试后如果仍失败，请在设置中反馈日志。</string>
+
+    <!-- ============ 录音卡：更多菜单 ============ -->
+    <string name="menu_play">播放 / 暂停</string>
+    <string name="menu_share">分享文本</string>
+    <string name="menu_delete">删除</string>
+
+    <!-- ============ 模型页 ============ -->
+    <string name="btn_add_model_cd">添加自定义模型</string>
+    <string name="btn_paste_models_cd">批量粘贴模型</string>
+    <string name="model_recommend">入门推荐</string>
+    <string name="model_recommend_body">约 20MB，下载最快、占用最小，适合大多数中文场景。想要更高精度可以之后再换大模型。</string>
+    <string name="detail_min_ram">建议可用内存</string>
+    <string name="detail_sources">下载源（失败自动切换）</string>
+    <string name="action_details">详情</string>
+
+    <!-- ============ 首次使用引导（无模型置顶卡） ============ -->
+    <string name="guide_no_model_title">还没有识别模型</string>
+    <string name="guide_no_model_body">录音 / 导入不受影响：音频照常保存，装好模型后可以一键转写。想现在就实时转字，请先装下面的入门模型。</string>
+    <string name="guide_recommend_body">推荐先装「%1$s」（%2$s）：体积最小、下载最快，装上即可实时转写；想要更高精度之后可以再换大模型。</string>
+
+    <!-- ============ 文案迁移：格式化 / 语言 / 镜像（原硬编码在代码里） ============ -->
+    <string name="size_unknown">大小未知</string>
+    <string name="unknown">未知</string>
+    <string name="unknown_error">未知错误</string>
+    <string name="eta_seconds">%1$d秒</string>
+    <string name="eta_minutes">%1$d分</string>
+    <string name="eta_minutes_seconds">%1$d分%2$d秒</string>
+    <string name="eta_hours">%1$d小时</string>
+    <string name="eta_hours_minutes">%1$d小时%2$d分</string>
+    <string name="sort_default">默认顺序</string>
+    <string name="sort_desc">大小从大到小</string>
+    <string name="sort_asc">从小到大</string>
+    <string name="lang_zh">中文</string>
+    <string name="lang_en">英文</string>
+    <string name="lang_yue">粤语</string>
+    <string name="lang_ko">韩语</string>
+    <string name="lang_fr">法语</string>
+    <string name="lang_bn">孟加拉语</string>
+    <string name="lang_unknown">未标注</string>
+    <string name="engine_sherpa">sherpa-onnx（流式离线识别）</string>
+    <string name="mirror_1">镜像 1</string>
+    <string name="mirror_2">镜像 2</string>
+    <string name="mirror_3">镜像 3</string>
+    <string name="mirror_hf">HF 镜像</string>
+    <string name="mirror_primary">主源</string>
+    <string name="detail_sources_value">%1$d 个：</string>
+
+    <!-- ============ 文案迁移：设置 / 关于 / 设备信息 ============ -->
+    <string name="settings_unknown_version">未知版本</string>
+    <string name="settings_storage_total">总占用: %1$s</string>
+    <string name="settings_storage_available">可用空间: %1$s</string>
+    <string name="settings_open_github_failed">无法打开GitHub链接</string>
+    <string name="settings_export_logs_wip">日志导出功能开发中</string>
+    <string name="settings_about_body">实时语音转写应用\n\n基于sherpa-onnx流式Paraformer引擎实现离线语音识别功能。\n\n主要特性:\n• 实时语音转写\n• 离线工作\n• 中英双语支持\n• 模型自定义\n• 历史记录管理\n\n技术架构:\n• AudioRecord音频采集\n• sherpa-onnx ASR引擎\n• Room数据库\n• WorkManager后台任务</string>
+    <string name="device_info_header">设备信息:\n\n</string>
+    <string name="device_android_version">Android版本: %1$s (API %2$d)\n</string>
+    <string name="device_model">设备型号: %1$s\n</string>
+    <string name="device_processor">处理器: %1$s\n</string>
+    <string name="device_abi">系统架构: %1$s\n</string>
+    <string name="device_app_version">应用版本: </string>
+    <string name="storage_info_header">\n\n存储信息:\n</string>
+    <string name="storage_internal_header">内部存储:\n</string>
+    <string name="storage_total_line">  总计: %1$s\n</string>
+    <string name="storage_used_line">  已用: %1$s\n</string>
+    <string name="storage_available_line">  可用: %1$s\n</string>
+    <string name="storage_external_header">\n外部存储:\n</string>
+
+    <!-- ============ 文案迁移：自定义模型 / 导入 / 转写文本文件 / 通知 ============ -->
+    <string name="custom_model_size">大小: %1$s</string>
+    <string name="err_import_read_failed">无法读取所选文件</string>
+    <string name="model_not_active_wrapped">（未启用）</string>
+    <string name="txt_no_model">[已录音，等待下载模型后转写]</string>
+    <string name="txt_no_speech">[未检测到语音]</string>
+    <string name="txt_header_title">实时转写 %1$s\n</string>
+    <string name="txt_header_duration">时长: %1$s\n</string>
+    <string name="txt_header_engine">引擎: sherpa-onnx 流式模型\n</string>
+    <string name="notification_paused">已暂停</string>
+    <string name="notification_paused_no_model">仅录音（已暂停，未加载识别模型）</string>
 </resources>

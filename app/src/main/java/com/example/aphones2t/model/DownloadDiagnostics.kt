@@ -2,6 +2,7 @@ package com.example.aphones2t.model
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.example.aphones2t.R
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -25,7 +26,8 @@ data class DownloadError(
     val stack: String? = null
 ) {
     /** 卡片上显示的一行摘要。 */
-    fun summary(): String = message.ifBlank { type.ifBlank { "未知错误" } }
+    fun summary(context: Context): String =
+        message.ifBlank { type.ifBlank { context.getString(R.string.unknown_error) } }
 }
 
 /** 下载进度快照：页面重建后（WorkInfo 还没重新发射时）也能继续显示真实进度。 */

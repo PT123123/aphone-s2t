@@ -122,7 +122,10 @@ class CustomModelActivity : AppCompatActivity() {
         })
         if (info.downloadSizeBytes > 0) {
             inner.addView(TextView(this).apply {
-                text = "大小: ${Formatter.formatFileSize(this@CustomModelActivity, info.downloadSizeBytes)}"
+                text = getString(
+                    R.string.custom_model_size,
+                    Formatter.formatFileSize(this@CustomModelActivity, info.downloadSizeBytes)
+                )
                 textSize = 12f
                 setTextColor(0xFF6B7280.toInt())
             })

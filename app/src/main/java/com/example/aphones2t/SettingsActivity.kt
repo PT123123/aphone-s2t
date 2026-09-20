@@ -91,7 +91,7 @@ class SettingsActivity : AppCompatActivity() {
                 )
                 "${packageInfo.versionName} (${packageInfo.longVersionCode})"
             } catch (e: Exception) {
-                "未知版本"
+                requireContext().getString(R.string.settings_unknown_version)
             }
 
             // 关于
@@ -147,11 +147,11 @@ class SettingsActivity : AppCompatActivity() {
             val cacheSize = StorageUtils.getAppStorageSize(context) - modelSize - recordingsSize
 
             val storageInfo = buildString {
-                append("模型占用: ${Formatter.formatFileSize(context, modelSize)}\n")
-                append("录音占用: ${Formatter.formatFileSize(context, recordingsSize)}\n")
-                append("缓存占用: ${Formatter.formatFileSize(context, cacheSize)}\n")
-                append("总占用: ${Formatter.formatFileSize(context, modelSize + recordingsSize + cacheSize)}\n\n")
-                append("可用空间: ${Formatter.formatFileSize(context, StorageUtils.getAvailableInternalStorage(context))}")
+                append(context.getString(R.string.storage_models_size, Formatter.formatFileSize(context, modelSize))).append('\n')
+                append(context.getString(R.string.storage_recordings_size, Formatter.formatFileSize(context, recordingsSize))).append('\n')
+                append(context.getString(R.string.storage_cache_size, Formatter.formatFileSize(context, cacheSize))).append('\n')
+                append(context.getString(R.string.settings_storage_total, Formatter.formatFileSize(context, modelSize + recordingsSize + cacheSize))).append("\n\n")
+                append(context.getString(R.string.settings_storage_available, Formatter.formatFileSize(context, StorageUtils.getAvailableInternalStorage(context))))
             }
 
             findPreference<Preference>("storage_info")?.summary = storageInfo
@@ -178,24 +178,7 @@ class SettingsActivity : AppCompatActivity() {
 
         private fun showAboutDialog() {
             val context = requireContext()
-            val aboutText = """
-                |实时语音转写应用
-                |
-                |基于sherpa-onnx流式Paraformer引擎实现离线语音识别功能。
-                |
-                |主要特性:
-                |• 实时语音转写
-                |• 离线工作
-                |• 中英双语支持
-                |• 模型自定义
-                |• 历史记录管理
-                |
-                |技术架构:
-                |• AudioRecord音频采集
-                |• sherpa-onnx ASR引擎
-                |• Room数据库
-                |• WorkManager后台任务
-            """.trimMargin("|")
+            val aboutText = context.getString(R.string.settings_about_body)
 
             androidx.appcompat.app.AlertDialog.Builder(context)
                 .setTitle(R.string.settings_about)
@@ -211,7 +194,7 @@ class SettingsActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 android.widget.Toast.makeText(
                     requireContext(),
-                    "无法打开GitHub链接",
+                    requireContext().getString(R.string.settings_open_github_failed),
                     android.widget.Toast.LENGTH_SHORT
                 ).show()
             }
@@ -295,7 +278,7 @@ class SettingsActivity : AppCompatActivity() {
         private fun exportLogs() {
             android.widget.Toast.makeText(
                 requireContext(),
-                "日志导出功能开发中",
+                requireContext().getString(R.string.settings_export_logs_wip),
                 android.widget.Toast.LENGTH_SHORT
             ).show()
         }
@@ -303,21 +286,21 @@ class SettingsActivity : AppCompatActivity() {
         private fun showDeviceInfo() {
             val context = requireContext()
             val deviceInfo = buildString {
-                append("设备信息:\n\n")
-                append("Android版本: ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})\n")
-                append("设备型号: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}\n")
-                append("处理器: ${android.os.Build.HARDWARE}\n")
-                append("系统架构: ${android.os.Build.SUPPORTED_ABIS.joinToString()}\n")
-                append("应用版本: ")
+                append(context.getString(R.string.device_info_header))
+                append(context.getString(R.string.device_android_version, android.os.Build.VERSION.RELEASE, android.os.Build.VERSION.SDK_INT))
+                append(context.getString(R.string.device_model, "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}"))
+                append(context.getString(R.string.device_processor, android.os.Build.HARDWARE))
+                append(context.getString(R.string.device_abi, android.os.Build.SUPPORTED_ABIS.joinToString()))
+                append(context.getString(R.string.device_app_version))
                 try {
                     val packageInfo = context.packageManager.getPackageInfo(
                         context.packageName, 0
                     )
                     append("${packageInfo.versionName} (${packageInfo.longVersionCode})")
                 } catch (e: Exception) {
-                    append("未知")
+                    append(context.getString(R.string.unknown))
                 }
-                append("\n\n存储信息:\n")
+                append(context.getString(R.string.storage_info_header))
                 append(StorageUtils.getStorageInfoString(context))
             }
 
