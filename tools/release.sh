@@ -22,6 +22,8 @@
 
 set -euo pipefail
 
+# Repo root resolved from this script's own location (tools/..) — no machine-specific
+# absolute path baked in, so the script works from any clone and any checkout dir.
 APHONE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 AREAD=$APHONE/a-readtext
 DIST=$APHONE/dist
